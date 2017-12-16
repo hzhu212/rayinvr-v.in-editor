@@ -99,3 +99,10 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# Text Editor
+.vscode/
+
+# custom
+/my-vins
+/test.py

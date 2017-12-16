@@ -4,7 +4,9 @@
 
 ## Introduction
 
-A simple but useful editor developed with Python3 used for editing "strata-velocity model input file (v.in)".
+A simple but useful editor developed with Python3(tkinter+matplotlib) used for editing "strata-velocity model input file (v.in)".
+
+If you aren't interested in the functions of the editor, the code itself is a good example for how to create interactive plot with `matplotlib`.
 
 `v.in` is a kind of ascii file used by the program "rayinvr" developed by Zelt and Smith (1992).
 

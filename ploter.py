@@ -60,7 +60,6 @@ class VmodelPloter(object):
             return
         self.ax.invert_yaxis()
         self.ax.set_title('vmodle for file "%s"' %self.path_vin)
-        self.lines.clear()
         for layer in self.model:
             line, = self.ax.plot(layer.depth[0], layer.depth[1], 'ko--',
                 picker=5, linewidth=1, markeredgewidth=1, markerfacecolor='w', markersize=4)
@@ -229,12 +228,49 @@ class VmodelPloter(object):
             try:
                 self.model.delete_node(node_idx)
             except Exception as e:
-                self.window.show_error('插入节点失败，发生了以下错误：\n%s' %(','.join(e.args)))
+                self.window.show_error('删除节点失败，发生了以下错误：\n%s' %(','.join(e.args)))
             line = self.lines[node_idx[0]]
             xs, ys = line.get_data()
             xs = np.delete(xs, node_idx[2])
             ys = np.delete(ys, node_idx[2])
             line.set_data(xs, ys)
+        self.selected.clear()
+        self.redraw()
+
+    def insert_layer(self):
+        """在选中层的下侧插入一层，其形状与该层相同但向下平移一段距离
+        其底速度为当前层的底速度，顶速度为当前层顶底速度的线性插值"""
+        if not self.selected:
+            return
+        ilayers = list(set([node_idx[0] for node_idx in self.selected]))
+        if len(ilayers) > 1:
+            self.window.show_warning('插入新层失败！\n无法同时插入多个层，请确保只选中一个层，将在该层下方插入新层')
+            return
+        ilayer = ilayers[0]
+        logging.debug('Before inserting layer:\nnlayer: %i\nn_ax_lines: %i\nn_lines: %i\n' \
+            %(self.model.nlayer, len(self.ax.lines), len(self.lines)))
+        self.model.insert_layer(ilayer)
+        new_layer = self.model[ilayer+1]
+        line, = self.ax.plot(new_layer.depth[0], new_layer.depth[1], 'ko--',
+            picker=5, linewidth=1, markeredgewidth=1, markerfacecolor='w', markersize=4)
+        self.lines.insert(ilayer+1, line)
+        logging.debug('After inserting layer:\nnlayer: %i\nn_ax_lines: %i\nn_lines: %i\n' \
+            %(self.model.nlayer, len(self.ax.lines), len(self.lines)))
+        self.selected.clear()
+        self.redraw()
+
+    def delete_layers(self):
+        """删除所有选中的层"""
+        if not self.selected:
+            return
+        ilayers = list(set([node_idx[0] for node_idx in self.selected]))
+        try:
+            for i in reversed(ilayers):
+                self.model.delete_layer(i)
+                line = self.lines.pop(i)
+                self.ax.lines.remove(line)
+        except Exception as e:
+            self.window.show_error('删除层失败，发生了以下错误：\n%s' %(','.join(e.args)))
         self.selected.clear()
         self.redraw()
 
@@ -303,7 +339,8 @@ class VmodelPloter(object):
             # return
         if event.key not in ('control', 'up', 'down', 'ctrl+up', 'ctrl+down',
             'left', 'right', 'ctrl+left', 'ctrl+right', 'c', 'n', 'p', 'N', 'P',
-            'i', 'd', 'delete', 'ctrl+o', 'ctrl+r', 'ctrl+s', 'ctrl+S', 'f1'):
+            'i', 'd', 'delete', 'ctrl+i', 'ctrl+d', 'ctrl+o', 'ctrl+r', 'ctrl+s',
+            'ctrl+S', 'f1'):
             return
         if event.key == 'control':
             self.ctrl_mode = True
@@ -339,8 +376,14 @@ class VmodelPloter(object):
         if event.key == 'i':
             self.insert_nodes()
             return
+        if event.key == 'ctrl+i':
+            self.insert_layer()
+            return
         if event.key in ('d', 'delete'):
             self.delete_nodes()
+            return
+        if event.key == 'ctrl+d':
+            self.delete_layers()
             return
         if event.key == 'ctrl+o':
             self.ctrl_mode = False

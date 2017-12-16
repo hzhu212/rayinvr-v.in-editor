@@ -1,3 +1,5 @@
+import copy
+import logging
 import numpy as np
 import re
 from tkinter import filedialog
@@ -48,6 +50,10 @@ class TripleLine(object):
                     + _dumps(left)
         return _dumps(self._data)
 
+    def copy(self):
+        """将对象复制一份，返回新的对象"""
+        return TripleLine(copy.deepcopy(self._data))
+
     def move_node(self, idx, delta_x, delta_y):
         """移动节点，并返回移动后节点的坐标"""
         self._data[0][idx] += delta_x
@@ -78,13 +84,9 @@ class TripleLine(object):
     def y(self):
         return self._data[1]
 
-    @property
-    def z(self):
-        return self._data[1]
-
-    @property
-    def v(self):
-        return self._data[1]
+    @y.setter
+    def y(self, new_y):
+        self._data[1] = new_y
 
     @property
     def vary(self):
@@ -115,12 +117,16 @@ class TripleLine(object):
         return new_node
 
     def delete_node(self, i):
-        """删除第 i 个节点右，如果节点超出索引，则认为在最后一个节点右侧插入，不抛出错误"""
+        """删除第 i 个节点右侧的节点，如果节点超出索引，则抛出错误
+        如果节点被删空，则返回 True ，否则返回 False"""
         try:
             for lst in self._data:
                 lst.pop(i)
         except IndexError as e:
             raise IndexError('节点索引在横向上超出了模型范围')
+        if len(self) == 0:
+            return True
+        return False
 
 class Layer(object):
     """地层模型的一层。
@@ -158,6 +164,10 @@ class Layer(object):
     def __getitem__(self, slc):
         return self._data[slc]
 
+    def copy(self):
+        """对象深复制"""
+        return Layer(copy.deepcopy(self._data))
+
     @property
     def depth(self):
         return self._data[0]
@@ -166,9 +176,17 @@ class Layer(object):
     def v_top(self):
         return self._data[1]
 
+    @v_top.setter
+    def v_top(self, new_v):
+        self._data[1] = new_v
+
     @property
     def v_bottom(self):
         return self._data[2]
+
+    @v_bottom.setter
+    def v_bottom(self, new_v):
+        self._data[2] = new_v
 
     def get_tpl(self, node_idx):
         """给出 NodeIndex 对象，返回节点所在的 TripleLine 对象，如果超出索引则返回 None"""
@@ -199,7 +217,7 @@ class Vmodel(object):
                 in_layer.clear()
                 current_layer += 1
             in_layer.extend(lines[3*i:3*(i+1)])
-        self.end_layer = '\n'.join(lines[-2:]) + '\n'
+        # self.end_layer = '\n'.join(lines[-2:]) + '\n'
 
     @classmethod
     def load(cls, path_vin):
@@ -209,9 +227,13 @@ class Vmodel(object):
             vmodel.loads(f.read())
         return vmodel
 
+    def _end_layer(self):
+        """v.in 文件末尾会有 2 行结束行，否则会有格式问题"""
+        return '%2i%9.3f\n%2i%9.3f\n' %(self.nlayer+1,0,0,1e3)
+
     def dumps(self):
         """将模型生成 v.in 格式的字符串"""
-        return ''.join([ly.dumps(i+1) for i,ly in enumerate(self._data)]) + self.end_layer
+        return ''.join([ly.dumps(i+1) for i,ly in enumerate(self._data)]) + self._end_layer()
 
     def dump(self, path_vin):
         """将模型以 v.in 的格式保存到指定文件中"""
@@ -276,7 +298,45 @@ class Vmodel(object):
         tpl = self.get_tpl(node_idx)
         if tpl is None:
             raise IndexError('节点索引在纵向上超出了模型范围')
-        tpl.delete_node(node_idx[2])
+        # 拷贝一份 TripleLine 对象用于试验节点是否会被删空
+        tpl_cp = tpl.copy()
+        is_empty = tpl_cp.delete_node(node_idx[2])
+        # 如果未删空，则正常删除节点并返回
+        if not is_empty:
+            tpl.delete_node(node_idx[2])
+            return
+        # 速度节点禁止删空
+        if node_idx[1] != 0:
+            raise ValueError('一层的速度节点不能全部删除，请至少保留一个')
+        # 深度节点删空，则直接删除整个层
+        self._data.pop(node_idx[0])
+
+    def insert_layer(self, ilayer):
+        """在指定层的下方插入一层"""
+        try:
+            current_layer = self._data[ilayer]
+            next_layer = self._data[ilayer+1]
+        except IndexError as e:
+            raise IndexError('层索引超出范围')
+        new_layer = current_layer.copy()
+        # 新插入的层向下平移一小段位于先前的两层中间
+        delta_z = (next_layer.depth.y[0] - current_layer.depth.y[0]) / 2
+        new_layer.depth.y = [z+delta_z for z in new_layer.depth.y]
+        # 新层的顶速度为当前层顶底速度的平均，长度与当前层相同
+        v_top = (current_layer.v_top.y[0] + current_layer.v_bottom.y[0]) / 2
+        new_layer.v_top.y = [v_top for i in new_layer.v_top.y]
+        # 将当前层的底速度重置为新层的顶速度
+        current_layer.v_top.y = new_layer.v_top.y.copy()
+        # 新层的底速度与当前层相同，无需计算
+        self._data.insert(ilayer+1, new_layer)
+        logging.debug(new_layer)
+
+    def delete_layer(self, ilayer):
+        """删除一层"""
+        try:
+            self._data.pop(ilayer)
+        except IndexError as e:
+            raise IndexError('层索引超出范围')
 
 
 class NodeIndex(object):

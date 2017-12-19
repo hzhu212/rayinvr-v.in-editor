@@ -20,10 +20,10 @@ Ctrl+左键: 多选和取消多选
 中键: 取消所有选中状态
 --------------------------------------------------
 快捷键：
-up: 将所有选中的节点上移 1 个 step_y_sm 的距离
-down: 将所有选中的节点下移 1 个 step_y_sm 的距离
-ctrl+up: 将所有选中的节点上移 1 个 step_y_lg 的距离
-ctrl+down: 将所有选中的节点下移 1 个 step_y_lg 的距离
+up: 将所有选中的节点上移 1 个 dy_sm 的距离
+down: 将所有选中的节点下移 1 个 dy_sm 的距离
+ctrl+up: 将所有选中的节点上移 1 个 dy_lg 的距离
+ctrl+down: 将所有选中的节点下移 1 个 dy_lg 的距离
 c: 取消所有选中状态
 n: 选中当前节点的下一个节点
 p: 选中当前节点的前一个节点
@@ -39,10 +39,10 @@ ctrl+s: 将当前模型回写到关联的 v.in 文件中
 ctrl+shift+s: 将当前模型另存为 v.in 文件
 --------------------------------------------------
 参数说明：
-step_x_sm: small，按 left/right 键时节点沿 x 轴运动的小段距离
-step_x_lg: large，按 ctrl+left/right 键时节点沿 x 轴运动的较大距离
-step_y_sm: 按 up/down 键时节点沿 y 轴运动的小段距离
-step_y_lg: 按 ctrl+up/down 键时节点沿 y 轴运动的较大距离
+dx_sm: small，按 left/right 键时节点沿 x 轴运动的小段距离
+dx_lg: large，按 ctrl+left/right 键时节点沿 x 轴运动的较大距离
+dy_sm: 按 up/down 键时节点沿 y 轴运动的小段距离
+dy_lg: 按 ctrl+up/down 键时节点沿 y 轴运动的较大距离
 pick_size: 鼠标点选操作的笔尖大小，笔尖越小越不容易选中节点，越容易选中整条曲线
 """
 
@@ -104,9 +104,9 @@ class PloterWindow(object):
         # 采用 gridspec 进行布局
         # 左侧区域包含单个绘图 axes
         self.fig = plt.figure(figsize=(10,6))
-        self.fig.subplots_adjust(top=0.95, bottom=0.05)
+        self.fig.subplots_adjust(top=0.96, bottom=0.075)
         self.plot_grid = gridspec.GridSpec(1, 1)
-        self.plot_grid.update(left=0.05, right=0.70)
+        self.plot_grid.update(left=0.06, right=0.715)
         self.plot_ax = plt.subplot(self.plot_grid[0, 0])
         # 右侧区域包含一群控件 axes
         self.widget_grid = gridspec.GridSpec(15, 12)
@@ -151,10 +151,10 @@ class PloterWindow(object):
         ax_2 = plt.subplot(self.widget_grid[-1, :6])
         ax_1 = plt.subplot(self.widget_grid[-1, 6:])
 
-        self.slider1 = Slider(ax1, 'step_x_sm', 0, 0.05, 0.01, '%.2f')
-        self.slider2 = Slider(ax2, 'step_x_lg', 0, 0.5, 0.05, '%.2f')
-        self.slider3 = Slider(ax3, 'step_y_sm', 0, 0.005, 0.001, '%.3f')
-        self.slider4 = Slider(ax4, 'step_y_lg', 0, 0.05, 0.005, '%.3f')
+        self.slider1 = Slider(ax1, 'dx_sm', 0, 0.05, 0.01, '%.2f')
+        self.slider2 = Slider(ax2, 'dx_lg', 0, 0.5, 0.05, '%.2f')
+        self.slider3 = Slider(ax3, 'dy_sm', 0, 0.005, 0.001, '%.3f')
+        self.slider4 = Slider(ax4, 'dy_lg', 0, 0.05, 0.005, '%.3f')
         self.slider5 = Slider(ax5, 'pick_size', 0, 2, 0.15, '%.2f')
         self.sliders = (self.slider1, self.slider2, self.slider3, self.slider4, self.slider5)
         self.slider_intervals = (0.01, 0.05, 0.001, 0.005, 0.05)

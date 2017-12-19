@@ -22,6 +22,7 @@ class VmodelPloter(object):
             self.fig = self.ax.get_figure()
         self.model = None
         self.lines = []
+        self.texts = []
         self.selected = set()
         self.selected_mask = None
         self.ctrl_mode = False
@@ -49,7 +50,7 @@ class VmodelPloter(object):
             self.window.show_error('载入模型时出现以下错误：\n\n"%s"\n\n请检查模型格式' %(', '.join(map(str,e.args))))
             return
 
-    def init_selected_mask(self):
+    def init_selected(self):
         """初始化选中点，以实现选中点的高亮显示"""
         self.selected_mask, = self.ax.plot([], [], 'rs', ms=6, markeredgewidth=1,
             markerfacecolor='k', visible=False)
@@ -59,13 +60,16 @@ class VmodelPloter(object):
         if not self.model:
             return
         self.ax.invert_yaxis()
-        self.ax.set_title('vmodle for file "%s"' %self.path_vin)
+        self.ax.set_title('vmodle for file "%s"' %self.path_vin, fontsize=10)
+        self.ax.set_xlabel('x (km)')
+        self.ax.set_ylabel('depth (km)')
         for layer in self.model:
             line, = self.ax.plot(layer.depth[0], layer.depth[1], 'ko--',
                 picker=5, linewidth=1, markeredgewidth=1, markerfacecolor='w', markersize=4)
             self.lines.append(line)
-        self.init_selected_mask()
-        self.show_selected()
+        self.init_selected()
+        self.draw_line_label()
+        self.draw_selected()
         plt.show()
 
     def reload(self):
@@ -73,18 +77,22 @@ class VmodelPloter(object):
         self.load_model()
         self.ax.cla()
         self.ax.invert_yaxis()
-        self.ax.set_title('vmodle for file "%s"' %self.path_vin)
+        self.ax.set_title('vmodle for file "%s"' %self.path_vin, fontsize=10)
+        self.ax.set_xlabel('x (km)')
+        self.ax.set_ylabel('depth (km)')
         self.lines.clear()
+        self.texts.clear()
         self.selected.clear()
         for layer in self.model:
             line, = self.ax.plot(layer.depth[0], layer.depth[1], 'ko--',
                 picker=5, linewidth=1, markeredgewidth=1, markerfacecolor='w', markersize=4)
             self.lines.append(line)
-        self.init_selected_mask()
+        self.init_selected()
+        self.draw_line_label()
         self.redraw()
 
     def redraw(self):
-        self.show_selected()
+        self.draw_selected()
         self.fig.canvas.draw_idle()
 
     def save_back(self):
@@ -108,16 +116,16 @@ class VmodelPloter(object):
         line.set_data(xs, ys)
 
     @property
-    def step_x_sm(self):
+    def dx_sm(self):
         return self.window.slider_vals[0]
     @property
-    def step_x_lg(self):
+    def dx_lg(self):
         return self.window.slider_vals[1]
     @property
-    def step_y_sm(self):
+    def dy_sm(self):
         return self.window.slider_vals[2]
     @property
-    def step_y_lg(self):
+    def dy_lg(self):
         return self.window.slider_vals[3]
     @property
     def pick_tolerence(self):
@@ -125,26 +133,26 @@ class VmodelPloter(object):
 
     def move_left(self):
         """将所有选中的节点左移"""
-        delta_x = -self.step_x_lg if self.ctrl_mode else -self.step_x_sm
+        delta_x = -self.dx_lg if self.ctrl_mode else -self.dx_sm
         delta_y = 0
         self.move(delta_x, delta_y)
 
     def move_right(self):
         """将所有选中的节点右移"""
-        delta_x = self.step_x_lg if self.ctrl_mode else self.step_x_sm
+        delta_x = self.dx_lg if self.ctrl_mode else self.dx_sm
         delta_y = 0
         self.move(delta_x, delta_y)
 
     def move_up(self):
         """将所有选中的节点上移"""
         delta_x = 0
-        delta_y = -self.step_y_lg if self.ctrl_mode else -self.step_y_sm
+        delta_y = -self.dy_lg if self.ctrl_mode else -self.dy_sm
         self.move(delta_x, delta_y)
 
     def move_down(self):
         """将所有选中的节点下移"""
         delta_x = 0
-        delta_y = self.step_y_lg if self.ctrl_mode else self.step_y_sm
+        delta_y = self.dy_lg if self.ctrl_mode else self.dy_sm
         self.move(delta_x, delta_y)
 
     def move(self, delta_x, delta_y):
@@ -247,16 +255,15 @@ class VmodelPloter(object):
             self.window.show_warning('插入新层失败！\n无法同时插入多个层，请确保只选中一个层，将在该层下方插入新层')
             return
         ilayer = ilayers[0]
-        logging.debug('Before inserting layer:\nnlayer: %i\nn_ax_lines: %i\nn_lines: %i\n' \
-            %(self.model.nlayer, len(self.ax.lines), len(self.lines)))
         self.model.insert_layer(ilayer)
         new_layer = self.model[ilayer+1]
         line, = self.ax.plot(new_layer.depth[0], new_layer.depth[1], 'ko--',
             picker=5, linewidth=1, markeredgewidth=1, markerfacecolor='w', markersize=4)
         self.lines.insert(ilayer+1, line)
-        logging.debug('After inserting layer:\nnlayer: %i\nn_ax_lines: %i\nn_lines: %i\n' \
-            %(self.model.nlayer, len(self.ax.lines), len(self.lines)))
+        self.texts.clear()
+        self.ax.texts.clear()
         self.selected.clear()
+        self.draw_line_label()
         self.redraw()
 
     def delete_layers(self):
@@ -271,7 +278,10 @@ class VmodelPloter(object):
                 self.ax.lines.remove(line)
         except Exception as e:
             self.window.show_error('删除层失败，发生了以下错误：\n%s' %(','.join(e.args)))
+        self.texts.clear()
+        self.ax.texts.clear()
         self.selected.clear()
+        self.draw_line_label()
         self.redraw()
 
     def on_button_press(self, event):
@@ -410,7 +420,16 @@ class VmodelPloter(object):
             self.ctrl_mode = False
             return
 
-    def show_selected(self):
+    def draw_line_label(self):
+        """在每条线的左端添加文字标签"""
+        for i, line in enumerate(self.lines):
+            x, y = (line.get_xdata()[0], line.get_ydata()[0])
+            t = self.ax.text(x, y, 'S%s' %(i+1), fontsize=8, rotation=30., ha='right', va='bottom',
+                bbox=dict(boxstyle="square", ec=(1., 0.5, 0.5), fc=(1., 0.8, 0.8), alpha=0.7),
+                )
+            self.texts.append(t)
+
+    def draw_selected(self):
         """高亮显示选中的点"""
         if not self.selected:
             xs, ys = [], []
@@ -418,3 +437,4 @@ class VmodelPloter(object):
             xs, ys = tuple(zip(*[self.model.get_node(node_idx) for node_idx in self.selected]))[:2]
         self.selected_mask.set_data(xs, ys)
         self.selected_mask.set_visible(True)
+

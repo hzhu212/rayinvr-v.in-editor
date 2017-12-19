@@ -104,5 +104,6 @@ ENV/
 .vscode/
 
 # custom
+/cache
 /my-vins
 /test.py

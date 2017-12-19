@@ -1,26 +1,27 @@
 import copy
 import logging
-import numpy as np
 import re
-from tkinter import filedialog
+
 
 class TripleLine(object):
-    """地层模型每 3 行作为一组数据(长度超过10可以折行)
-    分别为：节点 x 坐标、节点深度/速度、反演时是否可变
-    其中，每一行都用一个 numpy 数组保存"""
+    """3 lines of the v.in file/model.
+    The 3 lines can fold to 6, 9 or 3N lines when the number of nodes exceed
+    10*(N-1)."""
     def __init__(self, data=None):
         super(TripleLine, self).__init__()
         self._data = data
 
     @classmethod
     def loads(cls, triple_string):
-        """从字符串中载入数据"""
+        """Load object from string."""
         if not triple_string.strip():
             return
         triple = cls()
         lines = triple_string.strip().split('\n')
         lines = [line.strip() for line in lines]
-        assert len(lines) % 3 == 0, '模型的一组节点数据必须为 3N 行'
+        if len(lines) % 3 != 0:
+            raise ValueError(
+                'TripleLine object can only load strings containing 3N lines.')
         triple_line = [[], [], []]
         for i in range(len(lines)//3):
             triple_line[0].extend(re.split(' +', lines[i*3])[1:])
@@ -29,12 +30,14 @@ class TripleLine(object):
         triple_line[0] = list(map(float, triple_line[0]))
         triple_line[1] = list(map(float, triple_line[1]))
         triple_line[2] = list(map(int, triple_line[2]))
-        assert len(set(map(len, triple_line))) == 1, '一组节点的三行数据必须等长'
+        if len(set(map(len, triple_line))) != 1:
+            raise ValueError(
+                '3 lines of a TripleLine object must have the same length.')
         triple._data = triple_line
         return triple
 
     def dumps(self, idx=0):
-        """将数据输出为字符串"""
+        """Dump current object as string"""
         max_len = 10
         def _dumps(triple_data):
             if len(triple_data[0]) <= max_len:
@@ -51,11 +54,11 @@ class TripleLine(object):
         return _dumps(self._data)
 
     def copy(self):
-        """将对象复制一份，返回新的对象"""
+        """Make a deepcopy of current object."""
         return TripleLine(copy.deepcopy(self._data))
 
     def move_node(self, idx, delta_x, delta_y):
-        """移动节点，并返回移动后节点的坐标"""
+        """Move a node and return the position of moved node."""
         self._data[0][idx] += delta_x
         self._data[1][idx] += delta_y
         return (self._data[0][idx], self._data[1][idx])
@@ -93,11 +96,12 @@ class TripleLine(object):
         return self._data[2]
 
     def insert_node(self, i, new_node=None):
-        """在第 i 个节点右侧插入一个新的节点，如果节点超出索引，则认为在最后一个节点右侧插入，不抛出错误
-        返回插入后的新节点 3 元组"""
+        """Insert a node into the right side of the i-th node, and return
+        the value of the newly inserted node(a 1*3 tuple)."""
         if i >= len(self):
             i = len(self) - 1
-        # 如果新节点的值未指定，则采用两侧节点的线性插值
+        # If the value of the node to insert is not specified, determine it
+        # through linear interpolation.
         if new_node is None:
             if i == len(self) - 1:
                 x = self.x[i] + (self.x[i] - self.x[i-1] if i > 0 else 1)
@@ -109,50 +113,131 @@ class TripleLine(object):
             new_node = (x, y, vary)
         else:
             if new_node[0] <= self.x[i]:
-                raise ValueError('新插入节点的 x 坐标必须大于其左侧的节点')
-        # 插入新节点
+                raise ValueError(
+                    'The x value of the node to insert must larger than it of '
+                    'the left neighboring node.')
+        # Insert node
         self.x.insert(i+1, new_node[0])
         self.y.insert(i+1, new_node[1])
         self.vary.insert(i+1, new_node[2])
         return new_node
 
     def delete_node(self, i):
-        """删除第 i 个节点右侧的节点，如果节点超出索引，则抛出错误
-        如果节点被删空，则返回 True ，否则返回 False"""
+        """Delete the i-th node.
+        If the only node was deleted, return True, else, return False."""
         try:
             for lst in self._data:
                 lst.pop(i)
         except IndexError as e:
-            raise IndexError('节点索引在横向上超出了模型范围')
+            raise IndexError('Node index out of range in the x direction.')
         if len(self) == 0:
             return True
         return False
 
 class Layer(object):
-    """地层模型的一层。
-    data 为一个长度为 3 的数组，代表 3 个部分：地层深度、顶部速度、底部速度。
-    其中，每个部分均为一个 TripleLine 对象"""
+    """One layer of the v.in file/model.
+    Every layer consists of 3 parts:
+        1. Depth nodes of the layer;
+        2. Velocity nodes on the top of the layer;
+        3. Velocity nodes on the bottom of the layer.
+    Each part is a TripleLine object."""
     def __init__(self, data=None):
         super(Layer, self).__init__()
         self._data = data
 
     @classmethod
     def loads(cls, layer_string):
-        """从一层的字符串中加载层对象"""
+        """Load the Layer object from string"""
         layer = cls([])
         lines = layer_string.strip().split('\n')
-        assert len(lines) % 3 == 0, '模型的每层均应包含 3N 行'
+        if len(lines) % 3 != 0:
+            raise ValueError(
+                'Layer object can only load strings containing 3N lines.')
         last = 0
         for i in range(len(lines)//3):
             line2 = lines[3*i+1]
             if int(line2.lstrip()[:2]) == 0:
                 layer._data.append(TripleLine.loads('\n'.join(lines[last*3:(i+1)*3])))
                 last = i + 1
-        assert len(layer._data) == 3, '模型的每层必须且仅能包含 3 个部分：深度节点、顶速度节点、底速度节点'
+        if len(layer._data) != 3:
+            raise ValueError('Layer object must and can only contain <3> parts.')
+        layer.fix_depth()
+        layer.fix_v_top()
+        layer.fix_v_bottom()
         return layer
 
+    def copy(self):
+        return Layer(copy.deepcopy(self._data))
+
+    def fix_depth(self):
+        """Fix the special case of depth nodes. When layer has only 1 depth
+        node, it means the depth of the layer is constant. We expand the
+        only node to 2 nodes so we can get a horizontal line on the plot."""
+        d = self.depth
+        if len(d) == 1:
+            x, y, vary = (d.x[0], d.y[0], d.vary[0])
+            d.x.insert(0, 0)
+            d.y.insert(0, y)
+            d.vary.insert(0, vary)
+
+    def fix_v_top(self):
+        """Fix the special case of top velocity nodes. When layer has only 1
+        top velocity node, it means the top velocity of the layer is constant.
+        We expand the only node to 2 nodes so we can get a horizontal line on
+        the plot.
+        If the velocity of the only node is 0, it means there is no velocity
+        gradient on the surface between this layer and the upper layer."""
+        vt = self.v_top
+        if len(vt) == 1:
+            x, y, vary = (vt.x[0], vt.y[0], vt.vary[0])
+            vt.x.insert(0, 0)
+            vt.y.insert(0, y)
+            vt.vary.insert(0, vary)
+
+    def fix_v_bottom(self):
+        """Fix the special case of bottom velocity nodes. When layer has only 1
+        bottom velocity node, it means the bottom velocity of the layer is
+        constant. We expand the only node to 2 nodes so we can get a horizontal
+        line on the plot.
+        If the velocity of the only node is 0, it means there is no velocity
+        gradient inside this layer."""
+        vb = self.v_bottom
+        if len(vb) == 1:
+            x, y, vary = (vb.x[0], vb.y[0], vb.vary[0])
+            vb.x.insert(0, 0)
+            vb.y.insert(0, y)
+            vb.vary.insert(0, vary)
+
+    def recover_depth(self):
+        """Recover the fixed depth nodes."""
+        d = self.depth
+        if len(d) == 2 and abs(d.y[0]-d.y[1]) < 1e-6:
+            d.x.pop(0)
+            d.y.pop(0)
+            d.vary.pop(0)
+
+    def recover_v_top(self):
+        """Recover the fixed top velocity nodes."""
+        vt = self.v_top
+        if len(vt) == 2 and abs(vt.y[0]-vt.y[1]) < 1e-6:
+            vt.x.pop(0)
+            vt.y.pop(0)
+            vt.vary.pop(0)
+
+    def recover_v_bottom(self):
+        """Recover the fixed bottom velocity nodes."""
+        vb = self.v_bottom
+        if len(vb) == 2 and abs(vb.y[0]-vb.y[1]) < 1e-6:
+            vb.x.pop(0)
+            vb.y.pop(0)
+            vb.vary.pop(0)
+
     def dumps(self, idx=1):
-        return ''.join([tl.dumps(idx) for tl in self._data])
+        cp = self.copy()
+        cp.recover_v_bottom()
+        cp.recover_v_top()
+        cp.recover_depth()
+        return ''.join([tl.dumps(idx) for tl in cp._data])
 
     def __str__(self):
         return (
@@ -165,7 +250,6 @@ class Layer(object):
         return self._data[slc]
 
     def copy(self):
-        """对象深复制"""
         return Layer(copy.deepcopy(self._data))
 
     @property
@@ -189,25 +273,29 @@ class Layer(object):
         self._data[2] = new_v
 
     def get_tpl(self, node_idx):
-        """给出 NodeIndex 对象，返回节点所在的 TripleLine 对象，如果超出索引则返回 None"""
+        """Get one "part" of this layer(a TripleLine object) according to the
+        given NodeIndex object"""
         try:
-            return self._data[node_idx[1]]
+            return self._data[node_idx.ipart]
         except IndexError as e:
             return None
 
 
 class Vmodel(object):
-    """地层模型类
-    其 data 属性为一个 Layer 对象的数组"""
+    """The strata model(corresponding to a v.in file).
+    Consists of a series of Layer objects."""
     def __init__(self, data=None):
         super(Vmodel, self).__init__()
         self._data = data if data else []
 
     def loads(self, model_string):
-        """从字符串中加载模型"""
+        """Load model from string"""
         lines = model_string.strip().split('\n')
-        assert int(lines[0].lstrip()[:2]) == 1, '模型的起始层编号应为 1'
-        assert len(lines)%3 == 2, '请确保模型底部有结束层，结束层包含 2 行，即深度节点的 x 和 z 坐标'
+        if int(lines[0].lstrip()[:2]) != 1:
+            raise ValueError('The first layer number of a model should be 1.')
+        if len(lines)%3 != 2:
+            raise ValueError(
+                'There should be 2 ending lines at the end of v.in file.')
         current_layer = 1
         in_layer = []
         for i in range(len(lines)//3+1):
@@ -217,26 +305,26 @@ class Vmodel(object):
                 in_layer.clear()
                 current_layer += 1
             in_layer.extend(lines[3*i:3*(i+1)])
-        # self.end_layer = '\n'.join(lines[-2:]) + '\n'
 
     @classmethod
     def load(cls, path_vin):
-        """从 v.in 文件中加载模型"""
+        """Load model from v.in file."""
         vmodel = cls()
         with open(path_vin, 'r') as f:
             vmodel.loads(f.read())
         return vmodel
 
     def _end_layer(self):
-        """v.in 文件末尾会有 2 行结束行，否则会有格式问题"""
-        return '%2i%9.3f\n%2i%9.3f\n' %(self.nlayer+1,0,0,1e3)
+        """Generate the trailing 2 lines at the end of the v.in file"""
+        return '%2i%9.3f\n%2i%9.3f\n' %(self.nlayer+1, 0, 0, 100)
 
     def dumps(self):
-        """将模型生成 v.in 格式的字符串"""
-        return ''.join([ly.dumps(i+1) for i,ly in enumerate(self._data)]) + self._end_layer()
+        """Dump model into a string in the format of v.in."""
+        return ''.join([ly.dumps(i+1) for i,ly in enumerate(self._data)]) \
+            + self._end_layer()
 
     def dump(self, path_vin):
-        """将模型以 v.in 的格式保存到指定文件中"""
+        """Dump model into a v.in file."""
         with open(path_vin, 'w') as f:
             f.write(self.dumps())
 
@@ -259,93 +347,128 @@ class Vmodel(object):
         return len(self._data)
 
     def get_layer(self, node_idx):
-        """给出 NodeIndex 对象，返回节点所在的层对象，如果超出索引则返回 None"""
+        """Get the Layer object according to the given NodeIndex object."""
         try:
-            return self._data[node_idx[0]]
+            return self._data[node_idx.ilayer]
         except IndexError as e:
             return None
 
     def get_tpl(self, node_idx):
-        """给出 NodeIndex 对象，返回节点所在的 TripleLine 对象，如果超出索引则返回 None"""
+        """Get the TripleLine object according to the given NodeIndex object."""
         try:
-            return self._data[node_idx[0]][node_idx[1]]
+            return self._data[node_idx.ilayer][node_idx.ipart]
         except IndexError as e:
             return None
 
     def get_node(self, node_idx):
-        """给出 NodeIndex 对象，返回节点处的值（1*3 tuple），如果超出索引则返回 None"""
+        """Get the value of a node(1*3 tuple) according to the given NodeIndex
+        object."""
         try:
-            tpl = self._data[node_idx[0]][node_idx[1]]
-            return tuple([l[node_idx[2]] for l in tpl])
+            tpl = self._data[node_idx.ilayer][node_idx.ipart]
+            return tuple([l[node_idx.inode] for l in tpl])
         except (IndexError, TypeError) as e:
             return None
 
     def move_node(self, node_idx, delta_x, delta_y):
-        """移动一个节点"""
-        layer = self._data[node_idx[0]]
-        tpl = layer[node_idx[1]]
-        return tpl.move_node(node_idx[2], delta_x, delta_y)
+        """Move a node. The start and end nodes of a TripleLine object are
+        forbidden to move."""
+        if abs(delta_x) > 1e-6:
+            if node_idx.inode == 0:
+                raise ValueError('Can not move START node of layer')
+            if node_idx == node_idx.end(self):
+                raise ValueError('Can not move END node of layer')
+        tpl = self.get_tpl(node_idx)
+        return tpl.move_node(node_idx.inode, delta_x, delta_y)
 
     def insert_node(self, node_idx, new_node=None):
-        """在 node_idx 右侧插入一个新的节点，返回插入后的新节点 3 元组"""
+        """Insert a node after the given node specified by the NodeIndex object.
+        The end node of a TripleLine object is forbidden to insert after."""
+        if node_idx == node_idx.end(self):
+            raise ValueError('Can not insert node after END node of layer')
         tpl = self.get_tpl(node_idx)
         if tpl is None:
-            raise IndexError('节点索引在纵向上超出了模型范围')
-        return tpl.insert_node(node_idx[2], new_node)
+            raise IndexError('Node index out of range in y-direction')
+        return tpl.insert_node(node_idx.inode, new_node)
 
     def delete_node(self, node_idx):
-        """删除 node_idx 指示的节点"""
+        """Delete the node specified by the given NodeIndex object.
+        The start and end nodes of a TripleLine object are forbidden to delete.
+        If the only node of the TripleLine object was deleted, return True,
+        else, return False."""
+        if node_idx.inode == 0:
+            raise ValueError('Can not delete START node of layer')
+        if node_idx == node_idx.end(self):
+            raise ValueError('Can not delete END node of layer')
         tpl = self.get_tpl(node_idx)
         if tpl is None:
-            raise IndexError('节点索引在纵向上超出了模型范围')
-        # 拷贝一份 TripleLine 对象用于试验节点是否会被删空
+            raise IndexError('Node index out of range in y-direction')
+        # First make a copy of "tpl" to test if it will be deleted to empty.
         tpl_cp = tpl.copy()
-        is_empty = tpl_cp.delete_node(node_idx[2])
-        # 如果未删空，则正常删除节点并返回
+        is_empty = tpl_cp.delete_node(node_idx.inode)
         if not is_empty:
-            tpl.delete_node(node_idx[2])
+            tpl.delete_node(node_idx.inode)
             return
-        # 速度节点禁止删空
-        if node_idx[1] != 0:
-            raise ValueError('一层的速度节点不能全部删除，请至少保留一个')
-        # 深度节点删空，则直接删除整个层
-        self._data.pop(node_idx[0])
+        # TripleLine object of velocity nodes is forbidden to delete to empty.
+        if node_idx.ipart != 0:
+            raise ValueError('Can not delete all the velocity nodes of a layer')
+        # If the TripleLine object of depth nodes is deleted to empty,
+        # then delete the whole layer.
+        self._data.pop(node_idx.ilayer)
+        return is_empty
+
+    def get_thickness(self, ilayer):
+        """Get the thickness of a layer. the thickness is the difference
+        of depth between the first points of 2 neighboring nodes
+        Mainly for inserting layers, drawing text labels for layers etc."""
+        if ilayer >= self.nlayer:
+            return None
+            # raise IndexError('Layer index out of range')
+        # if the model only has 1 layer, then return a constant
+        if self.nlayer == 1:
+            return 0.1
+        # if don't have the next layer, then return the thickness of the upper layer
+        if ilayer == self.nlayer-1:
+            return self.get_thickness(ilayer-1)
+        # Normally, return the thickness of current layer
+        depth1 = self._data[ilayer].depth.y[0]
+        depth2 = self._data[ilayer+1].depth.y[0]
+        return depth2 - depth1
 
     def insert_layer(self, ilayer):
-        """在指定层的下方插入一层"""
-        try:
-            current_layer = self._data[ilayer]
-            next_layer = self._data[ilayer+1]
-        except IndexError as e:
-            raise IndexError('层索引超出范围')
+        """Insert a layer under the i-th layer."""
+        if ilayer >= self.nlayer:
+            raise IndexError('Layer index out of range')
+        current_layer = self._data[ilayer]
         new_layer = current_layer.copy()
-        # 新插入的层向下平移一小段位于先前的两层中间
-        delta_z = (next_layer.depth.y[0] - current_layer.depth.y[0]) / 2
-        new_layer.depth.y = [z+delta_z for z in new_layer.depth.y]
-        # 新层的顶速度为当前层顶底速度的平均，长度与当前层相同
+        # insert to the center of current layer
+        delta_y = self.get_thickness(ilayer) / 2
+        new_layer.depth.y = [y+delta_y for y in new_layer.depth.y]
+        # Set the top velocity of new inserted layer to the average of current
+        # top and bottom velocity
         v_top = (current_layer.v_top.y[0] + current_layer.v_bottom.y[0]) / 2
         new_layer.v_top.y = [v_top for i in new_layer.v_top.y]
-        # 将当前层的底速度重置为新层的顶速度
+        # Now the top of new layer becomes the bottom of current layer
         current_layer.v_top.y = new_layer.v_top.y.copy()
-        # 新层的底速度与当前层相同，无需计算
         self._data.insert(ilayer+1, new_layer)
         logging.debug(new_layer)
 
     def delete_layer(self, ilayer):
-        """删除一层"""
+        """Delete the i-th layer."""
         try:
             self._data.pop(ilayer)
         except IndexError as e:
-            raise IndexError('层索引超出范围')
+            raise IndexError('Layer index out of range.')
 
 
 class NodeIndex(object):
-    """模型中某个节点的索引，相当于一个 1*3 的 tuple，用 3 个整数分别制定：
-    层索引、所属部分索引、节点索引"""
+    """Class to index any node in a v.in model.
+    Like a 1*3 tuple with 3 integer indexs: layer index, part index and
+    node index."""
     def __init__(self, *args):
-        """接收 3 个整数参数"""
+        """Accept 3 integers as parameters."""
         super(NodeIndex, self).__init__()
-        assert len(args) == 3, 'NodeIndex 接收的参数为一个长度为 3 的 tuple 或 list'
+        if len(args) != 3:
+            raise ValueError('NodeIndex accept 3 integers as parameters.')
         self._data = tuple(map(int, args))
 
     def __getitem__(self, slc):
@@ -373,29 +496,52 @@ class NodeIndex(object):
         return self._data[2]
 
     def left(self):
-        """返回左边邻居节点的索引对象，如果已到最左侧则返回 None"""
+        """Get the left neighbor. Return None if there is no left neighbor."""
         if self.inode == 0:
             return None
         return NodeIndex(self.ilayer, self.ipart, self.inode-1)
 
     def right(self):
-        """返回右边邻居节点的索引对象"""
+        """Get the right neighbor. Return None if there is no right neighbor."""
         return NodeIndex(self.ilayer, self.ipart, self.inode+1)
 
     def up(self):
-        """返回上方邻居节点的索引对象，如果已到最上方则返回 None"""
+        """Get the upper neighbor. Return None if there is no upper neighbor."""
         if self.ilayer == 0:
             return None
         return NodeIndex(self.ilayer-1, self.ipart, self.inode)
 
     def down(self):
-        """返回下方邻居节点的索引对象"""
+        """Get the neighbor below. Return None if there is no neighbor below."""
         return NodeIndex(self.ilayer+1, self.ipart, self.inode)
 
     def begin(self):
-        """返回该层的第一个节点"""
+        """Get the starting node index corresponding to the current index."""
         return NodeIndex(self.ilayer, self.ipart, 0)
 
-    def end(self, length):
-        """返回该层的最后一个节点，需要传入该层的长度"""
+    def end(self, model):
+        """Get the last node index corresponding to the current index."""
+        length = len(model.get_tpl(self))
         return NodeIndex(self.ilayer, self.ipart, length-1)
+
+    def next(self, model):
+        """Get the next node index according to the given model."""
+        if model.get_node(self) is None:
+            return None
+        next_node = self.right()
+        if model.get_node(next_node) is None:
+            next_node = NodeIndex(self.ilayer+1, self.ipart, 0)
+            if model.get_node(next_node) is None:
+                return None
+        return next_node
+
+    def previous(self, model):
+        """Get the previous node index according to the given model."""
+        if self.ilayer == 0 and self._data[2] == 0:
+            return None
+        prev_node = self.left()
+        if prev_node is None:
+            prev_node = self.up().end(model)
+        if model.get_node(prev_node) is None:
+            return None
+        return prev_node

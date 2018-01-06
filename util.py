@@ -232,11 +232,12 @@ class Layer(object):
             vb.y.pop(0)
             vb.vary.pop(0)
 
-    def dumps(self, idx=1):
+    def dumps(self, idx=1, shrink=False):
         cp = self.copy()
-        cp.recover_v_bottom()
-        cp.recover_v_top()
-        cp.recover_depth()
+        if shrink:
+            cp.recover_v_bottom()
+            cp.recover_v_top()
+            cp.recover_depth()
         return ''.join([tl.dumps(idx) for tl in cp._data])
 
     def __str__(self):
@@ -287,6 +288,7 @@ class Vmodel(object):
     def __init__(self, data=None):
         super(Vmodel, self).__init__()
         self._data = data if data else []
+        self._end_layer_str = ''
 
     def loads(self, model_string):
         """Load model from string"""
@@ -296,6 +298,7 @@ class Vmodel(object):
         if len(lines)%3 != 2:
             raise ValueError(
                 'There should be 2 ending lines at the end of v.in file.')
+        self._end_layer_str = '\n'.join(lines[-2:]) + '\n'
         current_layer = 1
         in_layer = []
         for i in range(len(lines)//3+1):
@@ -316,7 +319,8 @@ class Vmodel(object):
 
     def _end_layer(self):
         """Generate the trailing 2 lines at the end of the v.in file"""
-        return '%2i%9.3f\n%2i%9.3f\n' %(self.nlayer+1, 0, 0, 100)
+        # return '%2i%9.3f\n%2i%9.3f\n' %(self.nlayer+1, 0, 0, 100)
+        return self._end_layer_str
 
     def dumps(self):
         """Dump model into a string in the format of v.in."""

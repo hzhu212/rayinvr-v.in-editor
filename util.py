@@ -484,6 +484,12 @@ class NodeIndex(object):
     def __eq__(self, other):
         return self._data == other._data
 
+    def __lt__(self, other):
+        return self._data < other._data
+
+    def __gt__(self, other):
+        return self._data > other._data
+
     def __str__(self):
         return '<class NodeIndex %s>' %str(self._data)
 

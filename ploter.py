@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,8 +8,12 @@ from util import Vmodel, NodeIndex
 
 
 class BasePloter(object):
-    markers = {'depth': 'o', 'v_top': 'v', 'v_bottom': '^'}
     """Base class for making interactive plot based on a vmodel object"""
+
+    # Each type of nodes has a unique marker in plot. depth nodes: circle;
+    # top velocity: downward-triangle; bottom velocity: upward-triangle
+    markers = OrderedDict([('depth', 'o'), ('v_top', 'v'), ('v_bottom', '^')])
+
     def __init__(self, parent=None, model=None):
         super(BasePloter, self).__init__()
         self.parent = parent
@@ -89,7 +94,7 @@ class BasePloter(object):
 
     def draw_selected(self):
         """Show select-mask when some node(s) is selected"""
-        logging.debug('selected node: ' + ', '.join(map(str, self.selected)))
+        logging.debug('selected node: ' + ', '.join(map(str, sorted(list(self.selected)))))
         if not self.selected:
             xs, ys = [], []
         else:

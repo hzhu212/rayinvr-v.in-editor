@@ -89,12 +89,12 @@ class BasePloter(object):
 
     def draw_selected(self):
         """Show select-mask when some node(s) is selected"""
+        logging.debug('selected node: ' + ', '.join(map(str, self.selected)))
         if not self.selected:
             xs, ys = [], []
         else:
-            xs, ys = tuple(zip(
-                *[self.model.get_node(node_idx) for node_idx in self.selected]
-                ))[:2]
+            nodes = sorted([self.model.get_node(ni) for ni in self.selected])
+            xs, ys, _ = zip(*nodes)
         self.select_mask.set_data(xs, ys)
         self.select_mask.set_visible(True)
 
@@ -335,7 +335,6 @@ class BasePloter(object):
             self.selected.update(new_selected)
         self.draw_selected()
         self.update_plot()
-        logging.debug('selected node: ' + ', '.join(map(str, self.selected)))
 
     def hot_keys(self):
         """Hot keys"""

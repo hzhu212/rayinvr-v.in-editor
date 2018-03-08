@@ -62,38 +62,41 @@
 
 ## 使用方法
 
+### 方法1：虚拟环境（推荐）
+
+请使用 Python 官方建议的 [Pipenv](https://github.com/pypa/pipenv) 来管理项目依赖，如果你还未使用过 Pipenv，可通过以下命令安装：
+
 ```sh
-git clone https://github.com/hzhu212/rayinvr-v.in-editor.git vin-editor
-cd vin-editor
-pip install -r requirements.txt
-py -3 start.py
+pip install pipenv
 ```
 
-推荐使用 `virtualenv`：
+安装好 Pipenv 后执行以下命令：
 
 ```sh
+# 下载项目
 git clone https://github.com/hzhu212/rayinvr-v.in-editor.git vin-editor
 cd vin-editor
 
-# install virtualenv
-pip install virtualenv
+# 建立虚拟环境并安装依赖（可能需要等待一段时间）
+pipenv install
 
-# create a virtual environment and activate it
-virtualenv venv
-./venv/Scripts/activate
-
-# install required packages into virtual environment, rather than globally
-pip install -r requirements.txt
-
-# start the program
-python start.py
+# 从虚拟环境启动项目
+pipenv run python start.py
 ```
 
-virtualenv 只用配置一次，下次运行直接用以下命令即可：
+### 方法2：全局安装（不推荐）
+
+如果你懒得创建虚拟环境，也可全局安装依赖，如下：
 
 ```sh
+# 下载项目
+git clone https://github.com/hzhu212/rayinvr-v.in-editor.git vin-editor
 cd vin-editor
-./venv/Scripts/activate
+
+# 全局安装依赖（可能需要等待一段时间）
+pip install -r requirements.txt
+
+# 启动项目
 python start.py
 ```
 

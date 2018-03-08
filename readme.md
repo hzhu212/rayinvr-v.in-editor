@@ -62,38 +62,41 @@ When working with a strata model, we usually adjust numbers in the `v.in` file b
 
 ## How to use
 
+### method 1: virtual environment (recommended)
+
+Please use [Pipenv](https://github.com/pypa/pipenv) to manage dependent packages, which is recommended by Python officially. If you have never used Pipenv before, just install it:
+
 ```sh
-git clone https://github.com/hzhu212/rayinvr-v.in-editor.git vin-editor
-cd vin-editor
-pip install -r requirements.txt
-py -3 start.py
+pip install pipenv
 ```
 
-A `virtualenv` version (recommend):
+Then:
 
 ```sh
+# download the project from github
 git clone https://github.com/hzhu212/rayinvr-v.in-editor.git vin-editor
 cd vin-editor
 
-# install virtualenv
-pip install virtualenv
+# create a virtual environment and install packages (may cost several minutes)
+pipenv install
 
-# create a virtual environment and activate it
-virtualenv venv
-./venv/Scripts/activate
-
-# install required packages into virtual environment, rather than globally
-pip install -r requirements.txt
-
-# start the program
-python start.py
+# launch vin-editor from virtual environment
+pipenv run python start.py
 ```
 
-Next time, you can just type these:
+### method 1: globally install (unrecommended)
+
+If you are too lazy to create a virtual environment, you can simply install dependent packages globally:
 
 ```sh
+# download the project from github
+git clone https://github.com/hzhu212/rayinvr-v.in-editor.git vin-editor
 cd vin-editor
-./venv/Scripts/activate
+
+# install dependent packages globally (may cost several minutes)
+pip install -r requirements.txt
+
+# launch vin-editor
 python start.py
 ```
 

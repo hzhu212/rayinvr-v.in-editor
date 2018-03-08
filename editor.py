@@ -1,6 +1,7 @@
 import functools
 import logging
 import tkinter as tk
+import tkinter.filedialog
 import tkinter.messagebox
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -43,6 +44,7 @@ dy_sm: the distance of small step in y direction.
 dy_lg: the distance of large step in y direction.
 pick_size: the pick size of the cursor. If the pick size is smaller,
     it's easer to pick a single node, but harder to pick the whole line.
+
 """
 
 def select_vin_dialog():
@@ -212,8 +214,8 @@ class PloterWindow(object):
         if self._close_by_exit_btn:
             return
         self.show_warning(
-            'Please don\'t close the window directly.\nIt may cause working '
-            'status lost.\nAlways use the EXIT BUTTON for exiting.')
+            'Please don\'t close the window directly, or your work may get lost.'
+            '\nPlease always use the EXIT BUTTON for exiting.')
         if self.ploter.is_modified():
             import datetime as dt
             import os
@@ -288,7 +290,8 @@ class PloterWindow(object):
     def show_help(self, msg=None):
         global help_msg
         msg = msg if msg else help_msg
-        tk.messagebox.askokcancel('Help', msg)
+        # tk.messagebox.askokcancel('Help', msg)
+        print(help_msg)
 
     def show_info(self, msg):
         tk.messagebox.showinfo('Info', msg)
@@ -302,13 +305,13 @@ class PloterWindow(object):
     def close_window_dialog(self):
         """Dialog when closing window."""
         return tk.messagebox.askokcancel(
-            'Info', 'Are you sure to exit?\nThe unsaved modification will lose!')
+            'Info', 'Are you sure to exit?\nThe unsaved modification will be lost!')
 
     def open_dialog(self):
         """Dialog when opening new v.in file"""
         return tk.messagebox.askokcancel(
             'Info', 'Are you sure to open a new v.in file?\nThe unsaved '
-            'modification will lose!')
+            'modification will be lost!')
 
     def select_vin_dialog(self):
         """Dialog to select a v.in file"""

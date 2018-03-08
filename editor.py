@@ -292,6 +292,7 @@ class PloterWindow(object):
         msg = msg if msg else help_msg
         # tk.messagebox.askokcancel('Help', msg)
         print(help_msg)
+        tk.messagebox.askokcancel('Help', 'Please read help message in console.')
 
     def show_info(self, msg):
         tk.messagebox.showinfo('Info', msg)

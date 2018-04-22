@@ -1,7 +1,5 @@
-import logging
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
-import numpy as np
 import os
 import tkinter as tk
 from tkinter import ttk
@@ -10,7 +8,8 @@ import traceback
 
 from definitions import ROOT_DIR
 from ploter import VmodelPloter
-from util import ScrollText
+from util import ScrollText, get_file_logger
+
 
 help_msg = """## Mouse Buttons
 
@@ -55,22 +54,14 @@ class MainWindow(tk.Tk):
     """Main window"""
     def __init__(self):
         super().__init__()
-        self.logger = self._get_logger()
+        self.logger = get_file_logger(
+            name = type(self).__name__,
+            file = os.path.join(ROOT_DIR, 'log', 'main_window.log'),
+            level = 'debug')
         self.init_variables()
         self.create_widgets()
         self.bind_events()
         self.canvas.draw()
-
-    def _get_logger(self):
-        logger = logging.getLogger('VinEditor')
-        logger.setLevel(logging.DEBUG)
-        LOG_FILE_PATH = os.path.join(ROOT_DIR, 'log', 'main_window.log')
-        file_handler = logging.FileHandler(LOG_FILE_PATH, encoding='utf8')
-        file_handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('[%(asctime)s] %(name)s %(levelname)s: %(message)s')
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-        return logger
 
     def init_variables(self):
         self.vin_path = None

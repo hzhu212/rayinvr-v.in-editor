@@ -1,10 +1,14 @@
 import copy
-import logging
 import os
 import re
 
 from definitions import ROOT_DIR
 from util import get_file_logger
+
+
+logger_tl = get_file_logger('TripleLine', file=os.path.join(ROOT_DIR, 'log', 'vmodel.log'), level='info')
+logger_ly = get_file_logger('Layer', file=os.path.join(ROOT_DIR, 'log', 'vmodel.log'), level='info')
+logger_vm = get_file_logger('Vmodel', file=os.path.join(ROOT_DIR, 'log', 'vmodel.log'), level='info')
 
 
 class TripleLine(object):
@@ -448,7 +452,7 @@ class Vmodel(object):
         # Now the top of new layer becomes the bottom of current layer
         current_layer.v_top.y = new_layer.v_top.y.copy()
         self._data.insert(ilayer+1, new_layer)
-        logging.debug(new_layer)
+        logger_vm.debug(new_layer)
 
     def delete_layer(self, ilayer):
         """Delete the i-th layer."""

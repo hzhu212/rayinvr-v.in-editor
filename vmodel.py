@@ -348,6 +348,17 @@ class Vmodel(object):
     def nlayer(self):
         return len(self._data)
 
+    @property
+    def xlim(self):
+        layer1_x = self._data[0].depth.x
+        return (layer1_x[0], layer1_x[-1])
+
+    @property
+    def ylim(self):
+        layer1_y = self._data[0].depth.y
+        layer_end_y = self._data[-1].depth.y
+        return (min(layer1_y), max(layer_end_y))
+
     def get_layer(self, node_idx):
         """Get the Layer object according to the given NodeIndex object."""
         try:

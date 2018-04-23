@@ -1,9 +1,10 @@
 from collections import OrderedDict
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 
 from definitions import ROOT_DIR
-from util import get_file_logger
+from util import get_file_logger, ModelVelocityInterpDelegator
 from vmodel import Vmodel, NodeIndex
 
 
@@ -356,13 +357,14 @@ class VmodelPloter(BasePloter):
     """Class to plot model profile"""
     def __init__(self, window):
         super().__init__(window)
-        self.v_ploter = None
+        self.v_delegator = ModelVelocityInterpDelegator(self)
         self.line_style.update(marker=self.MARKERS['depth'])
 
     def open(self):
         self.ax.cla()
         self.lines.clear()
         self.selected.clear()
+        self.v_delegator = ModelVelocityInterpDelegator(self)
         self.set_axes()
         self.load_model()
 
@@ -395,14 +397,12 @@ class VmodelPloter(BasePloter):
             self.lines.append(line)
         self.draw_texts()
 
-    def plot_v(self):
-        """open velocity plot"""
-        if self.v_ploter is None:
-            self.v_ploter = VPloter(window=self.wd, parent=self)
-        else:
-            self.v_ploter.clear()
-        self.v_ploter.init_plot()
-        self.v_ploter.plot_model()
+    def plot_model_isolate(self, ax):
+        """Plot the model"""
+        if not self.model:
+            return
+        for layer in self.model:
+            ax.plot(layer.depth[0], layer.depth[1], **self.line_style)
 
     def draw_texts(self):
         """Make a label for every line in the figure"""
@@ -473,6 +473,30 @@ class VmodelPloter(BasePloter):
         self.draw_select()
         self.draw()
 
+    def show_velocity_contour(self, mode=1):
+        from mpl_toolkits.mplot3d import axes3d
+        fig = plt.figure()
+        projection = None if mode==1 else '3d'
+        ax = fig.add_subplot(111, projection=projection)
+        fig.set_tight_layout(True)
+        ax.invert_yaxis()
+        ax.set_xlabel('X (km)')
+        ax.set_ylabel('Depth (km)')
+        xi, yi, vi = self.v_delegator.get_grid_data()
+        if mode == 1:
+            v_contour = ax.contourf(xi, yi, vi, cmap='plasma')
+            cbar = fig.colorbar(v_contour)
+            cbar.ax.set_ylabel('velocity (km/s)')
+            cbar.ax.invert_yaxis()
+        elif mode == 2:
+            ax.plot_wireframe(xi, yi, vi)
+        elif mode == 3:
+            ax.plot_surface(xi, yi, vi)
+        else:
+            pass
+        self.plot_model_isolate(ax)
+        plt.show()
+
     def on_key_press(self, event):
         """customed hot keys"""
         key = event.keysym
@@ -487,7 +511,7 @@ class VmodelPloter(BasePloter):
             self.delete_layers()
             return
         if not self.ctrl_mode and key == 'v':
-            self.plot_v()
+            self.show_velocity_contour()
             return
 
 

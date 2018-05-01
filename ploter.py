@@ -473,29 +473,47 @@ class VmodelPloter(BasePloter):
         self.draw_select()
         self.draw()
 
+
     def show_velocity_contour(self, mode=1):
         from mpl_toolkits.mplot3d import axes3d
         fig = plt.figure()
-        projection = None if mode==1 else '3d'
+        projection = None if mode in (1,2) else '3d'
         ax = fig.add_subplot(111, projection=projection)
         fig.set_tight_layout(True)
         ax.invert_yaxis()
         ax.set_xlabel('X (km)')
         ax.set_ylabel('Depth (km)')
-        xi, yi, vi = self.v_delegator.get_grid_data()
+        xx, yy, vv = self.v_delegator.get_grid_data()
         if mode == 1:
-            v_contour = ax.contourf(xi, yi, vi, cmap='plasma')
-            cbar = fig.colorbar(v_contour)
+            p = ax.imshow(
+                np.flip(vv, axis=0), cmap='jet', aspect='auto',
+                extent=self.model.xlim+self.model.ylim)
+            ax.invert_yaxis()
+            cbar = fig.colorbar(p, shrink=0.8, fraction=0.1, pad=0.03)
             cbar.ax.set_ylabel('velocity (km/s)')
             cbar.ax.invert_yaxis()
         elif mode == 2:
-            ax.plot_wireframe(xi, yi, vi)
+            def wrap_fmt(xx, yy, vv):
+                def fmt(x, y):
+                    i = np.searchsorted(yy[:,0], y)
+                    j = np.searchsorted(xx[0,:], x)
+                    v = vv[i, j]
+                    return 'x={x:.5f}  y={y:.5f}  z={z:.5f}'.format(x=x, y=y, z=v)
+                return fmt
+            ax.format_coord = wrap_fmt(xx, yy, vv)
+            p = ax.contourf(xx, yy, vv, cmap='jet')
+            cbar = fig.colorbar(p, shrink=0.8, fraction=0.1, pad=0.03)
+            cbar.ax.set_ylabel('velocity (km/s)')
+            cbar.ax.invert_yaxis()
         elif mode == 3:
-            ax.plot_surface(xi, yi, vi)
+            ax.plot_wireframe(xx, yy, vv)
+        elif mode == 4:
+            ax.plot_surface(xx, yy, vv)
         else:
             pass
         self.plot_model_isolate(ax)
         plt.show()
+
 
     def on_key_press(self, event):
         """customed hot keys"""

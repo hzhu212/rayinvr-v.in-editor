@@ -166,7 +166,7 @@ class Layer(object):
             raise ValueError('Layer object must consists of THREE parts, but %d got.' %(len(layer._data)))
         layer.fix_depth()
         layer.fix_v_top()
-        layer.fix_v_bottom()
+        layer.fix_v_bot()
         return layer
 
     def copy(self):
@@ -197,14 +197,14 @@ class Layer(object):
             vt.y.insert(0, y)
             vt.vary.insert(0, vary)
 
-    def fix_v_bottom(self):
+    def fix_v_bot(self):
         """Fix the special case of bottom velocity nodes. When layer has only 1
         bottom velocity node, it means the bottom velocity of the layer is
         constant. We expand the only node to 2 nodes so we can get a horizontal
         line on the plot.
         If the velocity of the only node is 0, it means there is no velocity
         gradient inside this layer."""
-        vb = self.v_bottom
+        vb = self.v_bot
         if len(vb) == 1:
             x, y, vary = (vb.x[0], vb.y[0], vb.vary[0])
             vb.x.insert(0, 0)
@@ -227,9 +227,9 @@ class Layer(object):
             vt.y.pop(0)
             vt.vary.pop(0)
 
-    def recover_v_bottom(self):
+    def recover_v_bot(self):
         """Recover the fixed bottom velocity nodes."""
-        vb = self.v_bottom
+        vb = self.v_bot
         if len(vb) == 2 and abs(vb.y[0]-vb.y[1]) < 1e-6:
             vb.x.pop(0)
             vb.y.pop(0)
@@ -238,7 +238,7 @@ class Layer(object):
     def dumps(self, idx=1, shrink=False):
         cp = self.copy()
         if shrink:
-            cp.recover_v_bottom()
+            cp.recover_v_bot()
             cp.recover_v_top()
             cp.recover_depth()
         return ''.join([tl.dumps(idx) for tl in cp._data])
@@ -266,11 +266,11 @@ class Layer(object):
         self._data[1] = new_v
 
     @property
-    def v_bottom(self):
+    def v_bot(self):
         return self._data[2]
 
-    @v_bottom.setter
-    def v_bottom(self, new_v):
+    @v_bot.setter
+    def v_bot(self, new_v):
         self._data[2] = new_v
 
     def get_tpl(self, node_idx):
@@ -458,7 +458,7 @@ class Vmodel(object):
         new_layer.depth.y = [y+delta_y for y in new_layer.depth.y]
         # Set the top velocity of new inserted layer to the average of current
         # top and bottom velocity
-        v_top = (current_layer.v_top.y[0] + current_layer.v_bottom.y[0]) / 2
+        v_top = (current_layer.v_top.y[0] + current_layer.v_bot.y[0]) / 2
         new_layer.v_top.y = [v_top for i in new_layer.v_top.y]
         # Now the top of new layer becomes the bottom of current layer
         current_layer.v_top.y = new_layer.v_top.y.copy()

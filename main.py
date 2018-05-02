@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox
 import traceback
 
 from definitions import ROOT_DIR
-from ploter import VmodelPloter
+from ploter import ModelPloter
 from util import ScrollText, get_file_logger
 
 
@@ -109,7 +109,7 @@ class MainFrame(ttk.Frame):
         self.canvas = FigureCanvasTkAgg(self.fig, master=plot_area)
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky='nswe')
         self.canvas._tkcanvas.grid(sticky='nswe')
-        self.ploter = VmodelPloter(MainFrameProxy(self))
+        self.ploter = ModelPloter(MainFrameProxy(self))
         # toolbar uses pack geometry manager internally, so wrap it with a frame
         # using grid geometry manager.
         toolbar_area = ttk.Frame(self)

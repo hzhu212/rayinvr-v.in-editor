@@ -6,9 +6,9 @@ from definitions import ROOT_DIR
 from util import get_file_logger
 
 
-logger_tl = get_file_logger('TripleLine', file=os.path.join(ROOT_DIR, 'log', 'vmodel.log'), level='info')
-logger_ly = get_file_logger('Layer', file=os.path.join(ROOT_DIR, 'log', 'vmodel.log'), level='info')
-logger_vm = get_file_logger('Vmodel', file=os.path.join(ROOT_DIR, 'log', 'vmodel.log'), level='info')
+logger_tl = get_file_logger('TripleLine', file=os.path.join(ROOT_DIR, 'log', 'model.log'), level='info')
+logger_ly = get_file_logger('Layer', file=os.path.join(ROOT_DIR, 'log', 'model.log'), level='info')
+logger_vm = get_file_logger('Model', file=os.path.join(ROOT_DIR, 'log', 'model.log'), level='info')
 
 
 class TripleLine(object):
@@ -282,7 +282,7 @@ class Layer(object):
             return None
 
 
-class Vmodel(object):
+class Model(object):
     """The strata model(corresponding to a v.in file).
     Consists of a series of Layer objects."""
     def __init__(self, data=None):
@@ -310,10 +310,10 @@ class Vmodel(object):
     @classmethod
     def load(cls, path_vin):
         """Load model from v.in file."""
-        vmodel = cls()
+        model = cls()
         with open(path_vin, 'r') as f:
-            vmodel.loads(f.read())
-        return vmodel
+            model.loads(f.read())
+        return model
 
     def _end_layer(self):
         """Generate the trailing 2 lines at the end of the v.in file"""
@@ -334,7 +334,7 @@ class Vmodel(object):
         return self._data[slc]
 
     def __str__(self):
-        return '<class Vmodel with {0} layers: [\n{1}]'.format(
+        return '<class Model with {0} layers: [\n{1}]'.format(
             self.nlayer,
             '\n'.join(map(lambda ly: '  ' + str(ly).replace('\n','\n  '), self._data)))
 

@@ -9,6 +9,7 @@ import traceback
 from definitions import ROOT_DIR
 from ploter import ModelPloter
 from util import ScrollText, get_file_logger
+from velocity import VelocityFrame
 
 
 help_msg = """## Mouse Buttons
@@ -91,8 +92,13 @@ class MainFrame(ttk.Frame):
         }
 
     def create_widgets(self):
-        # Bind window closing event
+        # Set master window properties
+        self.master.wm_title('v.in editor')
+        self.master.geometry('1000x600+200+30')
+        self.master.rowconfigure(0, weight=1)
+        self.master.columnconfigure(0, weight=1)
         self.master.protocol("WM_DELETE_WINDOW", self.exit)
+
         # Make frame resizable
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
@@ -143,10 +149,8 @@ class MainFrame(ttk.Frame):
             .grid(row=1, column=0, sticky='nswe')
         ttk.Button(btn_area, text='Save As', command=self.save_as)\
             .grid(row=1, column=1, sticky='nswe')
-        ttk.Button(btn_area, text='Help', command=self.show_help)\
-            .grid(row=2, column=0, sticky='nswe')
-        ttk.Button(btn_area, text='Exit', command=self.exit)\
-            .grid(row=2, column=1, sticky='nswe')
+        ttk.Button(btn_area, text='Show Velocity', command=self.show_velocity)\
+            .grid(row=2, column=0, columnspan=2, sticky='nswe')
 
         # echo message
         msg_area = self.gen_container(side_area, row_weight={1:1}, col_weight=1)
@@ -251,6 +255,13 @@ class MainFrame(ttk.Frame):
     def not_implement(self):
         messagebox.showinfo('Info', 'Not yet implemented')
 
+    def show_velocity(self):
+        if self.ploter.model is None:
+            return
+        vf = VelocityFrame(tk.Toplevel())
+        vf.grid(sticky='nswe')
+        vf.bind_model(self.ploter.model.copy())
+
     def show_help(self):
         HelpFrame(tk.Toplevel())
 
@@ -338,15 +349,16 @@ class MainFrame(ttk.Frame):
 
 class HelpFrame(ttk.Frame):
     """Help Window"""
-    def __init__(self, window):
-        super().__init__(window)
-        window.title('v.in editor - Help')
-        window.geometry('660x700+300+30')
-        window.rowconfigure(0, weight=1)
-        window.columnconfigure(0, weight=1)
+    def __init__(self, master):
+        super().__init__(master)
+        self.master = master
         self.create_widgets()
 
     def create_widgets(self):
+        self.master.title('v.in editor - Help')
+        self.master.geometry('660x700+300+30')
+        self.master.rowconfigure(0, weight=1)
+        self.master.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         self.grid(padx=20, pady=10, sticky='nswe')
@@ -357,15 +369,16 @@ class HelpFrame(ttk.Frame):
 
 class AboutFrame(ttk.Frame):
     """About Window"""
-    def __init__(self, window):
-        super().__init__(window)
-        window.title('v.in editor - About')
-        window.geometry('300x100+500+200')
-        window.rowconfigure(0, weight=1)
-        window.columnconfigure(0, weight=1)
+    def __init__(self, master):
+        super().__init__(master)
+        self.master = master
         self.create_widgets()
 
     def create_widgets(self):
+        self.master.title('v.in editor - About')
+        self.master.geometry('300x100+500+200')
+        self.master.rowconfigure(0, weight=1)
+        self.master.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         self.grid(padx=20, pady=10, sticky='nswe')
@@ -405,10 +418,6 @@ class MainFrameProxy(object):
 
 if __name__ == '__main__':
     root = tk.Tk()
-    root.wm_title('v.in editor')
-    root.geometry('1000x600+200+30')
-    root.rowconfigure(0, weight=1)
-    root.columnconfigure(0, weight=1)
     mf = MainFrame(root)
     mf.grid(row=0, column=0, sticky='nswe')
     root.report_callback_exception = mf.report_callback_exception

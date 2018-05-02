@@ -5,11 +5,11 @@ import os
 
 from definitions import ROOT_DIR
 from util import get_file_logger, ModelVelocityInterpDelegator
-from vmodel import Vmodel, NodeIndex
+from model import Model, NodeIndex
 
 
 class BasePloter(object):
-    """Base class for making interactive plot based on a vmodel object"""
+    """Base class for making interactive plot based on a model object"""
 
     # Each type of nodes has a unique marker in plot. depth nodes: circle;
     # top velocity: downward-triangle; bottom velocity: upward-triangle
@@ -56,10 +56,10 @@ class BasePloter(object):
             xs, ys = [], []
         else:
             node_indexes = sorted(list(self.selected))
-            nodes = sorted([self.model.get_node(ni) for ni in node_indexes])
+            nodes = [self.model.get_node(ni) for ni in node_indexes]
             # Echo message for selected nodes
-            echo_msg = '\n'.join(['[ly,idx]: (x,y,flag)', '-'*25]) + '\n' + \
-                '\n'.join(['[%2d,%2d]: (%6.3f,%6.3f,%1d)' %(ni.ilayer, ni.inode, nd[0], nd[1], nd[2]) \
+            echo_msg = '\n'.join(['[ i, j]: ( x, z, flag)', '-'*28]) + '\n' + \
+                '\n'.join(['[%2d,%2d]: (%6.3f,%6.3f,%2d)' %(ni.ilayer, ni.inode, nd[0], nd[1], nd[2]) \
                 for ni, nd in zip(node_indexes, nodes)])
             # If there are 2 nodes selected, show there distance in addition
             if len(nodes) == 2:
@@ -353,11 +353,10 @@ class BasePloter(object):
             return
 
 
-class VmodelPloter(BasePloter):
+class ModelPloter(BasePloter):
     """Class to plot model profile"""
     def __init__(self, window):
         super().__init__(window)
-        self.v_delegator = ModelVelocityInterpDelegator(self)
         self.line_style.update(marker=self.MARKERS['depth'])
 
     def open(self):
@@ -380,11 +379,11 @@ class VmodelPloter(BasePloter):
     def load_model(self):
         """Load model from v.in file"""
         try:
-            self.model = Vmodel.load(self.wd.vin_path)
+            self.model = Model.load(self.wd.vin_path)
         except Exception as e:
             self.logger.exception(e)
             self.wd.show_error('Error'
-                'The following error occured when loading vmodel:"\n\n%s\n\n"'
+                'The following error occured when loading model:"\n\n%s\n\n"'
                 'please checked the format of your v.in file'
                 %(', '.join(map(str, e.args))))
 
@@ -396,13 +395,6 @@ class VmodelPloter(BasePloter):
             line, = self.ax.plot(layer.depth[0], layer.depth[1], **self.line_style)
             self.lines.append(line)
         self.draw_texts()
-
-    def plot_model_isolate(self, ax):
-        """Plot the model"""
-        if not self.model:
-            return
-        for layer in self.model:
-            ax.plot(layer.depth[0], layer.depth[1], **self.line_style)
 
     def draw_texts(self):
         """Make a label for every line in the figure"""
@@ -425,7 +417,7 @@ class VmodelPloter(BasePloter):
         """Check if the model has been modified"""
         if not self.model:
             return False
-        return self.model != Vmodel.load(self.wd.vin_path)
+        return self.model != Model.load(self.wd.vin_path)
 
     def save(self, path=None):
         """Save model back into current v.in file"""
@@ -473,48 +465,6 @@ class VmodelPloter(BasePloter):
         self.draw_select()
         self.draw()
 
-
-    def show_velocity_contour(self, mode=1):
-        from mpl_toolkits.mplot3d import axes3d
-        fig = plt.figure()
-        projection = None if mode in (1,2) else '3d'
-        ax = fig.add_subplot(111, projection=projection)
-        fig.set_tight_layout(True)
-        ax.invert_yaxis()
-        ax.set_xlabel('X (km)')
-        ax.set_ylabel('Depth (km)')
-        xx, yy, vv = self.v_delegator.get_grid_data()
-        if mode == 1:
-            p = ax.imshow(
-                np.flip(vv, axis=0), cmap='jet', aspect='auto',
-                extent=self.model.xlim+self.model.ylim)
-            ax.invert_yaxis()
-            cbar = fig.colorbar(p, shrink=0.8, fraction=0.1, pad=0.03)
-            cbar.ax.set_ylabel('velocity (km/s)')
-            cbar.ax.invert_yaxis()
-        elif mode == 2:
-            def wrap_fmt(xx, yy, vv):
-                def fmt(x, y):
-                    i = np.searchsorted(yy[:,0], y)
-                    j = np.searchsorted(xx[0,:], x)
-                    v = vv[i, j]
-                    return 'x={x:.5f}  y={y:.5f}  z={z:.5f}'.format(x=x, y=y, z=v)
-                return fmt
-            ax.format_coord = wrap_fmt(xx, yy, vv)
-            p = ax.contourf(xx, yy, vv, cmap='jet')
-            cbar = fig.colorbar(p, shrink=0.8, fraction=0.1, pad=0.03)
-            cbar.ax.set_ylabel('velocity (km/s)')
-            cbar.ax.invert_yaxis()
-        elif mode == 3:
-            ax.plot_wireframe(xx, yy, vv)
-        elif mode == 4:
-            ax.plot_surface(xx, yy, vv)
-        else:
-            pass
-        self.plot_model_isolate(ax)
-        plt.show()
-
-
     def on_key_press(self, event):
         """customed hot keys"""
         key = event.keysym
@@ -528,119 +478,43 @@ class VmodelPloter(BasePloter):
         if self.ctrl_mode and key == 'd':
             self.delete_layers()
             return
-        if not self.ctrl_mode and key == 'v':
-            self.show_velocity_contour()
-            return
 
 
 # ------------------------------------------------------------ #
 # velocity plot
 # ------------------------------------------------------------ #
-class VPloter(BasePloter):
+class VPloter(object):
     """Velocity ploter"""
-    def __init__(self, window, parent):
-        super().__init__(window)
-        # customed
-        self.model = self.parent.model
-        self.labels = []
-        self.set_axes()
+    def __init__(self, window, model):
+        self.wd = window
+        self.model = model
+        self.canvas = self.wd.canvas
+        self.fig = self.wd.fig
+        self.ax = self.wd.ax
+        self.v_delegator = ModelVelocityInterpDelegator(self)
+        self.line_style = dict(
+            linestyle='--', color='k', linewidth=1, marker='o', markersize=3,
+            markeredgewidth=1, markerfacecolor='None')
 
     def set_axes(self):
         self.ax.invert_yaxis()
-        self.ax.set_xlabel('x (km)')
-        self.ax.set_ylabel('velocity (km/s)')
-
-    def clear(self):
-        """Clear status to ready for replot"""
-        if self.ax is not None:
-            self.ax.cla()
-        self.lines.clear()
-        self.labels.clear()
-        self.texts.clear()
-        self.selected.clear()
+        self.ax.set_xlabel('X (km)')
+        self.ax.set_ylabel('Depth (km)')
 
     def plot_model(self):
-        """Get velocity plot.
-        If there are(is) selected nodes, then only plot velocity for the
-        surfaces that have selected nodes.
-        If there is no node selected, then plot velocity for all surfaces."""
-        if not self.parent.selected:
-            ilayers = range(len(self.model))
-        else:
-            ilayers = set([node_idx.ilayer for node_idx in self.parent.selected])
-            iupper_layers = set([i-1 for i in list(ilayers)]).difference(set([-1]))
-            ilayers = list(ilayers.union(iupper_layers))
-        for i in ilayers:
-            # For every selected surface, we plot 2 velocity line:
-            # 1. the velocity on the top of the surface
-            # 2. the velocity below the surface
-            line_v_top, = self.ax.plot(
-                self.model[i].v_top[0], self.model[i].v_top[1],
-                marker=self.MARKERS['v_top'], **self.line_style)
-            line_v_bottom, = self.ax.plot(
-                self.model[i].v_bottom[0], self.model[i].v_bottom[1],
-                marker=self.MARKERS['v_bottom'], **self.line_style)
-            lines = (line_v_top, line_v_bottom)
-            # assign surface index as label for every line
-            self.labels.extend([(i,1), (i,2)])
-            self.lines.extend(lines)
-        self.draw_texts()
+        """Plot the model"""
+        for layer in self.model:
+            self.ax.plot(layer.depth[0], layer.depth[1], **self.line_style)
 
-    def draw_texts(self):
-        """Draw label for each line """
-        self.ax.texts.clear()
-        self.texts.clear()
-        for (ilayer, ipart), line in zip(self.labels, self.lines):
-            # x, y = (line.get_xdata()[0], line.get_ydata()[0])
-            x, y = (0, line.get_ydata()[0])
-            t = self.ax.text(
-                x, y, 'Ly%s-%s' %(ilayer+1, 'top' if ipart==1 else 'bot'),
-                fontsize=8, rotation=30., ha='right', va='top', bbox=dict(
-                    boxstyle="square", ec=(1., 0.5, 0.5), fc=(1., 0.8, 0.8),
-                    alpha=0.7),
-                )
-            self.texts.append(t)
-
-    def is_modified(self):
-        with open(self.parent.cache_path) as f:
-            cached = f.read().rstrip()
-        current = self.model.dumps().rstrip()
-        return cached != current
-
-    def prompt_save(self):
-        return self.parent.prompt_save()
-
-    def prompt_reload(self):
-        if self.is_modified() and not self.parent.reload_dialog():
-            return
-        self.reload()
-
-    def reload(self):
-        """Reload model from parent cached v.in file"""
-        new_model = self.load_model()
-        if new_model is None:
-            return
-        self.model = new_model
-        self.parent.model = new_model
-        self.clear()
-        self.init_plot()
+    def plot_velocity_contour(self, mode=1):
+        self.set_axes()
+        xx, yy, vv = self.v_delegator.get_grid_data()
+        p = self.ax.imshow(
+            np.flip(vv, axis=0), cmap='jet', aspect='auto',
+            extent=self.model.xlim+self.model.ylim)
+        self.ax.invert_yaxis()
+        cbar = self.fig.colorbar(p, shrink=0.8, fraction=0.1, pad=0.03)
+        cbar.ax.set_ylabel('velocity (km/s)')
+        cbar.ax.invert_yaxis()
         self.plot_model()
-        self.draw_select()
-        self.draw()
-
-    def load_model(self):
-        """Load model from cached v.in file"""
-        try:
-            return Vmodel.load(self.parent.cache_path)
-        except Exception as e:
-            self.parent.show_error('Error',
-                'The following error occured when loading vmodel:\n\n"%s"\n\n'
-                'please checked the format of the cached v.in file:\n"%s"'
-                %(', '.join(map(str, e.args))), self.wd.cache_path)
-            return None
-
-    def get_tpl_idx_by_line(self, line):
-        return self.labels[self.lines.index(line)]
-
-    def get_line_by_tpl_idx(self, tpl_idx):
-        return self.lines[self.labels.index(tpl_idx)]
+        self.canvas.draw()

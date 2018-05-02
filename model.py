@@ -330,6 +330,9 @@ class Model(object):
         with open(path_vin, 'w') as f:
             f.write(self.dumps())
 
+    def copy(self):
+        return Model(copy.deepcopy(self._data))
+
     def __getitem__(self, slc):
         return self._data[slc]
 

@@ -50,10 +50,11 @@ help_msg = """## Mouse Buttons
 """
 
 
-class MainWindow(tk.Tk):
-    """Main window"""
-    def __init__(self):
-        super().__init__()
+class MainFrame(ttk.Frame):
+    """Main frame"""
+    def __init__(self, master):
+        super().__init__(master)
+        self.master = master
         self.logger = get_file_logger(
             name = type(self).__name__,
             file = os.path.join(ROOT_DIR, 'log', 'main_window.log'),
@@ -90,39 +91,37 @@ class MainWindow(tk.Tk):
         }
 
     def create_widgets(self):
-        # bind window closing event
-        self.protocol("WM_DELETE_WINDOW", self.exit)
-
-        # make root window resizable
+        # Bind window closing event
+        self.master.protocol("WM_DELETE_WINDOW", self.exit)
+        # Make frame resizable
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
-
+        # Create menu
         self.create_menu()
 
-        # frame for plotting
+        # Frame for plotting
         plot_area = ttk.Frame(self)
         plot_area.rowconfigure(0, weight=1)
         plot_area.columnconfigure(0, weight=1)
         plot_area.grid(row=0, column=0, sticky='nswe')
 
+        # Create matplotlib canvas for plotting
         self.canvas = FigureCanvasTkAgg(self.fig, master=plot_area)
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky='nswe')
         self.canvas._tkcanvas.grid(sticky='nswe')
-        self.ploter = VmodelPloter(MainWindowProxy(self))
-
+        self.ploter = VmodelPloter(MainFrameProxy(self))
         # toolbar uses pack geometry manager internally, so wrap it with a frame
         # using grid geometry manager.
         toolbar_area = ttk.Frame(self)
-        toolbar_area.grid(row=1, column=0, columnspan=2, sticky='nswe')
+        toolbar_area.grid(row=1, column=0, sticky='nswe')
         toolbar = NavigationToolbar2TkAgg(self.canvas, toolbar_area)
         toolbar.update()
 
-        # side frame for controlling widgets
-        # side_area = ttk.Frame(self, borderwidth=2, relief=tk.GROOVE)
+        # Side frame for controlling widgets
         side_area = ttk.Frame(self)
         side_area.rowconfigure(2, weight=1)
         side_area.columnconfigure(0, weight=1)
-        side_area.grid(row=0, column=1, padx=(0, 15), sticky='nswe')
+        side_area.grid(row=0, column=1, rowspan=2, padx=(0, 15), pady=(0, 15), sticky='nswe')
 
         # area for slider bars
         slider_area = self.gen_container(side_area, col_weight={1:1})
@@ -159,7 +158,7 @@ class MainWindow(tk.Tk):
 
     def create_menu(self):
         menubar = tk.Menu(self)
-        self.config(menu=menubar)
+        self.master.config(menu=menubar)
         filemenu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="File", menu=filemenu)
         filemenu.add_command(label="Open", command=self.open)
@@ -170,8 +169,8 @@ class MainWindow(tk.Tk):
 
         editmenu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Edit", menu=editmenu)
-        editmenu.add_command(label="Undo", command=self.test)
-        editmenu.add_command(label="Redo", command=self.test)
+        editmenu.add_command(label="Undo", command=self.not_implement)
+        editmenu.add_command(label="Redo", command=self.not_implement)
 
         helpmenu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Help", menu=helpmenu)
@@ -210,8 +209,8 @@ class MainWindow(tk.Tk):
         create_slider(parent, idx=4, name='pick', from_=0, to=3, resolution=0.05)
 
     def bind_events(self):
-        self.bind('<KeyPress>', self.on_key_press)
-        self.bind('<KeyRelease>', self.on_key_release)
+        self.master.bind('<KeyPress>', self.on_key_press)
+        self.master.bind('<KeyRelease>', self.on_key_release)
 
     def on_key_press(self, event):
         """Hot key definitions"""
@@ -240,16 +239,16 @@ class MainWindow(tk.Tk):
         # Pass key events to ploter
         self.ploter.on_key_release(event)
 
-    def sub_title(self, text=None):
+    def set_title(self, text=None):
         if not text:
             return
-        self.title(self.title() + ' - ' + text)
+        self.master.title(self.master.title() + ' - ' + text)
 
     def reset_sliders(self):
         for name, value in zip(self.slider_names, self.slider_init_values):
             self.settings[name].set(value)
 
-    def test(self):
+    def not_implement(self):
         messagebox.showinfo('Info', 'Not yet implemented')
 
     def show_help(self):
@@ -286,7 +285,7 @@ class MainWindow(tk.Tk):
         if not p:
             return
         self.vin_path = os.path.normpath(p)
-        self.sub_title(self.vin_path)
+        self.set_title(self.vin_path)
         self.ploter.open()
 
     def reload(self):
@@ -327,12 +326,12 @@ class MainWindow(tk.Tk):
                 'Warning', 'Do you want to exit?\nCurrent modifications will be lost!')
             if not okay:
                 return
-        self.quit()
-        self.destroy()
+        self.master.quit()
+        self.master.destroy()
 
-    def report_callback_exception(self, exc, val, tb):
-        self.logger.exception(val)
-        err_msg = traceback.format_exception(exc, val, tb)
+    def report_callback_exception(self, etype, evalue, tb):
+        self.logger.exception(evalue)
+        err_msg = traceback.format_exception(etype, evalue, tb)
         err_msg = ''.join(err_msg)
         messagebox.showerror('Internal Error', err_msg)
 
@@ -342,7 +341,7 @@ class HelpFrame(ttk.Frame):
     def __init__(self, window):
         super().__init__(window)
         window.title('v.in editor - Help')
-        window.geometry('650x700+300+30')
+        window.geometry('660x700+300+30')
         window.rowconfigure(0, weight=1)
         window.columnconfigure(0, weight=1)
         self.create_widgets()
@@ -350,10 +349,11 @@ class HelpFrame(ttk.Frame):
     def create_widgets(self):
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
-        self.grid(sticky='nswe')
-        text = tk.Text(self, bd=0, font=('Consolas', 11))
+        self.grid(padx=20, pady=10, sticky='nswe')
+        text = tk.Text(self, bd=0, bg='#F0F0F0', font=('Consolas', 11))
         text.grid(row=0, column=0, sticky='nswe')
         text.insert(tk.END, help_msg)
+        text.config(state=tk.DISABLED)
 
 class AboutFrame(ttk.Frame):
     """About Window"""
@@ -368,13 +368,15 @@ class AboutFrame(ttk.Frame):
     def create_widgets(self):
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
-        self.grid(sticky='nswe')
-        ttk.Label(self, text='v.in editor by <zhuhe212@163.com>')\
-            .grid(row=0, column=0, sticky='nswe')
+        self.grid(padx=20, pady=10, sticky='nswe')
+        text = tk.Text(self, bd=0, bg='#F0F0F0', font=('Consolas', 11))
+        text.grid(row=0, column=0, sticky='nswe')
+        text.insert(tk.END, 'v.in editor by <zhuhe212@163.com>')
+        text.config(state=tk.DISABLED)
 
 
-class MainWindowProxy(object):
-    """Proxying MainWindow Class"""
+class MainFrameProxy(object):
+    """Proxying MainFrame Class"""
     def __init__(self, window):
         self.window = window
         self.tk_variables = ('dx_sm', 'dx_lg', 'dy_sm', 'dy_lg', 'pick')
@@ -385,7 +387,7 @@ class MainWindowProxy(object):
             return self.window.settings[attr].get()
         if attr in self.allowed_attrs:
             return getattr(self.window, attr)
-        raise AttributeError('Attribute "%s" is not allowed by "MainWindowProxy"' %attr)
+        raise AttributeError('Attribute "%s" is not allowed by "MainFrameProxy"' %attr)
 
     def bind(self, *args, **kw):
         return self.window.bind(*args, **kw)
@@ -402,7 +404,12 @@ class MainWindowProxy(object):
 
 
 if __name__ == '__main__':
-    window = MainWindow()
-    window.wm_title('v.in editor')
-    window.geometry('1000x600+200+30')
-    window.mainloop()
+    root = tk.Tk()
+    root.wm_title('v.in editor')
+    root.geometry('1000x600+200+30')
+    root.rowconfigure(0, weight=1)
+    root.columnconfigure(0, weight=1)
+    mf = MainFrame(root)
+    mf.grid(row=0, column=0, sticky='nswe')
+    root.report_callback_exception = mf.report_callback_exception
+    root.mainloop()

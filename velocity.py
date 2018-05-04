@@ -6,9 +6,10 @@ from tkinter import ttk
 from tkinter import messagebox
 
 from definitions import ROOT_DIR
+from globals_ import session, history
 from model import ModelProcessor
 from ploter import VContourPlotDelegator, VSectionPlotDelegator
-from util import get_file_logger
+from util import get_file_logger, parse_pois_str
 
 
 class VelocityFrame(ttk.Frame):
@@ -20,9 +21,9 @@ class VelocityFrame(ttk.Frame):
             name = type(self).__name__,
             file = os.path.join(ROOT_DIR, 'log', 'velocity_window.log'),
             level = 'debug')
-        self.model = None
+        self.model_proc = None
         self.has_vcf_init = False
-        self.last_tab_id = 0
+        self.last_tab_id = None
         self.create_widgets()
 
     def create_widgets(self):
@@ -37,20 +38,22 @@ class VelocityFrame(ttk.Frame):
         self.columnconfigure(0, weight=1)
 
         # Create a Notebook widget to contain several panels
-        notebook = ttk.Notebook(self)
-        notebook.grid(row=0, column=0, sticky='nswe')
+        self.notebook = ttk.Notebook(self)
+        self.notebook.grid(row=0, column=0, sticky='nswe')
         self.vsf = VelocitySectionFrame(self)
         self.vcf = VelocityContourFrame(self)
         self.st = SettingsFrame(self)
-        notebook.add(self.vsf, text=' Sections ', sticky='nswe')
-        notebook.add(self.vcf, text=' Contours ', sticky='nswe')
-        notebook.add(self.st, text=' Settings ', sticky='nswe')
-        notebook.bind('<<NotebookTabChanged>>', self.tab_changed)
-        self.notebook = notebook
+        self.notebook.add(self.vsf, text=' Sections ', sticky='nswe')
+        self.notebook.add(self.vcf, text=' Contours ', sticky='nswe')
+        self.notebook.add(self.st, text=' Settings ', sticky='nswe')
+        self.notebook.bind('<<NotebookTabChanged>>', self.tab_changed)
 
     def bind_model(self, model):
-        self.model = model
-        self.model_proc = ModelProcessor(self.model)
+        self.model_proc = ModelProcessor(model)
+        pois_str = session.get('pois')
+        if pois_str:
+            pois_obj = parse_pois_str(pois_str)
+            self.model_proc.bind_pois(pois_obj)
         self.vsf.bind_model(self.model_proc)
 
     def tab_changed(self, event):
@@ -63,8 +66,19 @@ class VelocityFrame(ttk.Frame):
         self.last_tab_id = self.notebook.select()
         self.notebook.select(2)
 
-    def settings_ok(self):
-        self.notebook.select(self.last_tab_id)
+    def settings_work(self, flag_pois=False):
+        """A flag will be set as True when related settings is changed"""
+        if self.last_tab_id is not None:
+            self.notebook.select(self.last_tab_id)
+            self.last_tab_id = None
+        if flag_pois:
+            pois_str = session.get('pois')
+            if pois_str is not '':
+                pois_obj = parse_pois_str(pois_str)
+                self.model_proc.bind_pois(pois_obj)
+            else:
+                self.model_proc.unbind_pois()
+            self.vsf.start_plot()
 
 class SettingsFrame(ttk.Frame):
     """Some settings like poission ratio etc."""
@@ -90,6 +104,7 @@ class SettingsFrame(ttk.Frame):
             .grid(column=0, sticky='nsw')
         text = tk.Text(pois_area, height=5, font=('Consolas', 11))
         text.grid(column=0, pady=(5, 0), sticky='nswe')
+        text.insert(tk.END, session.get('pois'))
         self.pois_text = text
 
         # Controlling buttons
@@ -98,7 +113,20 @@ class SettingsFrame(ttk.Frame):
         ttk.Button(btn_area, text='OK', command=self.handle_ok).grid(sticky='nse')
 
     def handle_ok(self):
-        self.master.settings_ok()
+        flag_pois = False
+        pois_str = self.pois_text.get('1.0', tk.END).strip()
+        if pois_str != session.get('pois'):
+            flag_pois = True
+            if pois_str is not '':
+                try:
+                    pois_obj = parse_pois_str(pois_str)
+                except ValueError as e:
+                    messagebox.showerror('Error', '\n'.join([str(x) for x in e.args]), parent=self.master)
+                    return
+            session.set('pois', pois_str)
+            history.merge_session(session)
+
+        self.master.settings_work(flag_pois=flag_pois)
 
 
 class VelocityContourFrame(ttk.Frame):
@@ -147,6 +175,7 @@ class VelocityContourFrame(ttk.Frame):
     def bind_model(self, model_proc):
         """`model_proc` is a `ModelProcessor` object, which contains attribute `model`
         and some methods to process model"""
+        self.model_proc = model_proc
         self.ploter.plot_velocity_contour()
         self.fig.canvas.draw()
 
@@ -222,8 +251,13 @@ class VelocitySectionFrame(ttk.Frame):
     def bind_model(self, model_proc):
         self.model_proc = model_proc
         self.section_x_str.set(str(sum(self.model_proc.model.xlim)/2.0))
-        self.section_x_changed()
+        self.start_plot()
         self.fig.canvas.draw()
+
+    def start_plot(self):
+        section_x = float(self.section_x_str.get())
+        self.ploter.plot_sections(section_x)
+        self.apply_mbsf()
 
     def section_x_changed(self, event=None):
         xlim = self.model_proc.model.xlim

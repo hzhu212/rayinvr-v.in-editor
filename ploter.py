@@ -509,11 +509,12 @@ class VContourPlotDelegator(Delegator):
             self.ax.plot(x_v_bot, y_v_bot, color='k', marker=10, markerfacecolor='white', linestyle='None')
 
     def plot_velocity_contour(self):
-        xx, yy, vv = self.model_proc.get_v_contour()
-        p = self.ax.imshow(
-            np.flip(vv, axis=0), cmap='jet', aspect='auto',
-            extent=self.model_proc.model.xlim+self.model_proc.model.ylim)
-        self.ax.invert_yaxis()
+        xx, yy, vp, vs = self.model_proc.get_v_contour()
+        p = self.ax.pcolormesh(xx, yy, vp, cmap='jet')
+        # p = self.ax.imshow(
+        #     np.flip(vp, axis=0), cmap='jet', aspect='auto',
+        #     extent=self.model_proc.model.xlim+self.model_proc.model.ylim)
+        # self.ax.invert_yaxis()
         cbar = self.fig.colorbar(p, shrink=0.8, fraction=0.1, pad=0.03)
         cbar.ax.set_ylabel('velocity (km/s)')
         cbar.ax.invert_yaxis()
@@ -534,8 +535,9 @@ class VSectionPlotDelegator(Delegator):
     def init_plot(self):
         self.axs[0].set_ylabel(self.Y_LABEL)
         self.axs[0].invert_yaxis()
-        self.axs[2].set_xlim(left=0, right=0.5)
+        self.axs[2].set_xlim(left=0.35, right=0.5)
         for i, ax in enumerate(self.axs):
+            ax.grid(linestyle='--')
             ax.tick_params(axis='both', which='major', labelsize=9)
             ax.tick_params(axis='both', which='minor', labelsize=8)
             ax.set_xlabel(self.X_LABELS[i])
@@ -544,24 +546,35 @@ class VSectionPlotDelegator(Delegator):
         self.curves = [None] * 3
 
     def plot_sections(self, section_x):
-        self.plot_vp_section(section_x)
-        self.plot_vp_section(section_x)
-        self.plot_pois_section(section_x)
-
-    def plot_vp_section(self, section_x):
-        y, v = self.model_proc.get_v_section(section_x)
+        y, vp, vs, pois = self.model_proc.get_section_data(section_x)
         y = y * 1e3
+        if vs.size > 0:
+            self.plot_vs_section(y, vs)
+            self.plot_pois_section(y, pois)
+        self.plot_vp_section(y, vp)
+
+    def plot_vp_section(self, depth, val):
         if self.curves[0] is None:
-            self.curves[0], = self.axs[0].plot(v, y, 'r-', linewidth=1)
+            self.curves[0], = self.axs[0].plot(val, depth, 'r-', linewidth=1)
         else:
-            self.curves[0].set_data(v, y)
-        self.axs[0].set_ylim(top=0, bottom=1.05*y[-1])
+            self.curves[0].set_data(val, depth)
+        self.axs[0].set_ylim(top=0, bottom=1.05*depth[-1])
 
-    def plot_vs_section(self, section_x):
-        pass
+    def plot_vs_section(self, depth, val):
+        if self.curves[1] is None:
+            self.curves[1], = self.axs[1].plot(val, depth, 'g-', linewidth=1)
+        else:
+            self.curves[1].set_data(val, depth)
+        self.axs[1].relim()
+        self.axs[1].autoscale_view(scalex=True, scaley=False)
 
-    def plot_pois_section(self, section_x):
-        pass
+    def plot_pois_section(self, depth, val):
+        if self.curves[2] is None:
+            self.curves[2], = self.axs[2].plot(val, depth, 'b-', linewidth=1)
+        else:
+            self.curves[2].set_data(val, depth)
+        # self.axs[2].relim()
+        # self.axs[2].autoscale_view(scalex=True, scaley=False)
 
     def flatten_by_layer(self, idx):
         y = self.curves[0].get_ydata()

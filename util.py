@@ -2,6 +2,7 @@ import json
 import logging
 import numpy as np
 import os
+import re
 from scipy.interpolate import griddata
 import tkinter as tk
 
@@ -143,6 +144,11 @@ class SessionManager(BaseConfigManager):
         if self.autosave:
             self.save
 
+    def clear(self):
+        self.data = {
+            'file': '',
+            'pois': '',
+        }
 
 class HistoryManager(BaseConfigManager):
     """Manage application history"""
@@ -176,7 +182,7 @@ class HistoryManager(BaseConfigManager):
         if self.autosave:
             self.save()
 
-    def get_session(self, sid):
+    def get_session_data(self, sid):
         """Get history session by sid. `sid` is a integer(the index of recently opened files)
         or a recently opened file name"""
         if isinstance(sid, int):
@@ -203,3 +209,40 @@ class HistoryManager(BaseConfigManager):
         }
         if self.autosave:
             self.save()
+
+
+def parse_pois_str(pois_str):
+    """Parse poission string copied from r.in.
+    A poission string consists of 4 parts:
+    1. pois - an array containing the value of Poisson's ratio for each model layer.
+    2. poisl, 3. poisb - arrays specifying the layers and block numbers, respectively,
+        of model trapezoids within which Poisson's ratio is modified over that given
+        by pois using the array poisbl; for poisb, the trapezoids with a layer are
+        numbered from left to right.
+    4. poisbl - an array containing the value of Poisson's ratio for the model trapezoids
+        specified in the arrays poisl and poisb overriding the values assigned using
+        the array pois.
+    The last 3 parts are optional.
+    Here is an example of `pois_str`:
+        pois_str = '''pois=0.4999,0.4852,0.4770,0.4620,0.4700,
+        poisl=2,2,2,2,3,3,
+        poisb=2,3,5,6,2,4,
+        poisbl=0.485,0.487,0.476,0.458,0.462,0.489,'''
+    """
+    res = {}
+    names = ['pois', 'poisl', 'poisb', 'poisbl']
+    parts = re.split('\s*\n\s*', pois_str.strip())
+    if len(parts) not in (1, 4):
+        raise ValueError('Invalid poission string: %r ...' %(pois_str[:50]))
+    for part in parts:
+        name, value = part.split('=')
+        res[name] = eval('[' + value + ']')
+    if len(parts) == 4:
+        if set(res.keys()) != set(names):
+            raise ValueError('Invalid poission string: should contain and only contain %r' %','.join(names))
+        if not (len(res['poisl']) == len(res['poisb']) and len(res['poisl']) == len(res['poisbl'])):
+            raise ValueError('Invalid poission string: poisl, poisb and poisbl should be in the same length')
+    elif len(parts) == 1:
+        if list(res.keys()) != ['pois']:
+            raise ValueError('Invalid poission string: should contain a filed %r' %('pois'))
+    return res

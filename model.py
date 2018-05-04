@@ -282,6 +282,14 @@ class Layer(object):
         except IndexError as e:
             return None
 
+    def bind_pois(self, pois_obj):
+        """Binding poission ratio to layer.
+        `pois_obj` is a dict with 2 attributes: 'x' and 'y'. 'x' refers to horizontal
+        offset and 'y' refers to poission ratio. An example of pois_obj:
+            {'x': [1,2,2,4,4,5], 'y': [0.5,0.5,0.48,0.48,0.49,0.49]}
+            means poission ratio between 1-2km is 0.5, and 2-4km is 0.48 and so on."""
+        self.pois = pois_obj
+
 
 class Model(object):
     """The strata model(corresponding to a v.in file).
@@ -574,11 +582,57 @@ class NodeIndex(object):
 class ModelProcessor():
     """Model processor"""
     # How fine is the grid data for velocity contouring
-    NGRIDX = 1000
+    NGRIDX = 500
     NGRIDY = 1000
 
     def __init__(self, model):
         self.model = model
+        self.has_pois = False
+
+    @staticmethod
+    def vp2vs(vp, nu):
+        """Calculate Vs from Vp and pois"""
+        vs = vp / (2*(1-nu)/(1-2*nu))**0.5
+        return vs
+
+    def bind_pois(self, pois_obj):
+        """Bind poission ratio to model"""
+        self.has_pois = True
+        pois = np.array(pois_obj['pois'])
+        poisl = np.array(pois_obj.get('poisl', [])) - 1
+        poisb = np.array(pois_obj.get('poisb', [])) - 1
+        poisbl = np.array(pois_obj.get('poisbl', []))
+        pois[pois == 0.5] = 0.49999
+        poisbl[poisbl == 0.5] = 0.49999
+        if len(pois) < len(self.model):
+            tail = np.ones(len(self.model)-len(pois)) * pois[-1]
+            pois = np.hstack([pois, tail])
+        for ily in range(len(self.model)-1):
+            ly_cur, ly_next = self.model[ily], self.model[ily+1]
+            x_top, x_bot = ly_cur.depth.x, ly_next.depth.x
+            x_v_top, x_v_bot = ly_cur.v_top.x, ly_cur.v_bot.x
+            x_all = sorted(list(set(np.hstack([x_top, x_bot, x_v_top, x_v_bot]))))
+
+            layer_pois = pois[ily]
+            x, y = [], []
+            indices = (poisl == ily)
+            iblks, pois_bl = poisb[indices], poisbl[indices]
+            if iblks.size is 0:
+                x, y = [x_all[0], x_all[-1]], [layer_pois]*2
+            else:
+                if iblks[0] != 0:
+                    np.insert(iblks, 0, 0)
+                    np.insert(pois_bl, 0, layer_pois)
+                if iblks[-1] != len(x_all)-2:
+                    np.append(iblks, len(x_all)-2)
+                    np.append(pois_bl, layer_pois)
+                for iblk, p in zip(iblks, pois_bl):
+                    x.extend([x_all[iblk], x_all[iblk+1]])
+                    y.extend([p] * 2)
+            ly_cur.bind_pois({'x': x, 'y': y})
+
+    def unbind_pois(self):
+        self.has_pois = False
 
     def get_vp_data(self):
         """Get Vp data"""
@@ -594,11 +648,11 @@ class ModelProcessor():
         return data
 
     @staticmethod
-    def interp_block(xs, ys, vs, xx, yy):
+    def interp_block(x_corner, y_corner, v_corner, xx, yy):
         """velocity interpolating inside a block in rayinvr model"""
-        x1, x2, x3, x4 = tuple(xs)
-        y1, y2, y3, y4 = tuple(ys)
-        v1, v2, v3, v4 = tuple(vs)
+        x1, x2, x3, x4 = tuple(x_corner)
+        y1, y2, y3, y4 = tuple(y_corner)
+        v1, v2, v3, v4 = tuple(v_corner)
         assert x1 == x3 and x2 == x4, 'block should be a trapezoidal in vertical'
         y_top = np.interp(xx, [x1, x2], [y1, y2])
         v_top = np.interp(xx, [x1, x2], [v1, v2])
@@ -608,12 +662,15 @@ class ModelProcessor():
         return vv
 
     def get_v_contour(self):
-        """interpolate velocity block by block"""
+        """Get velocity grid data by interpolating velocity block by block"""
         xlim, ylim = self.model.xlim, self.model.ylim
         x = np.linspace(xlim[0], xlim[1], self.NGRIDX)
         y = np.linspace(ylim[0], ylim[1], self.NGRIDY)
         xx, yy = np.meshgrid(x, y)
-        vv = np.full(xx.shape, np.nan)
+        vp = np.full(xx.shape, np.nan)
+        vs = None
+        if self.has_pois:
+            vs = np.full(xx.shape, np.nan)
 
         for ily in range(len(self.model)-1):
             ly_cur, ly_next = self.model[ily], self.model[ily+1]
@@ -621,6 +678,8 @@ class ModelProcessor():
             y_top, y_bot = ly_cur.depth.y, ly_next.depth.y
             x_v_top, x_v_bot = ly_cur.v_top.x, ly_cur.v_bot.x
             v_top, v_bot = ly_cur.v_top.y, ly_cur.v_bot.y
+            if self.has_pois:
+                x_pois, pois_ly = ly_cur.pois['x'], ly_cur.pois['y']
 
             x_all = sorted(list(set(np.hstack([x_top, x_bot, x_v_top, x_v_bot]))))
             y_top_all = np.interp(x_all, x_top, y_top)
@@ -632,24 +691,51 @@ class ModelProcessor():
             for iblk in range(len(x_all)-1):
                 x1, x2 = x_all[iblk], x_all[iblk+1]
                 block_mask = layer_mask & (x1 <= xx) & (xx <= x2)
-                xs = [x1, x2, x1, x2]
-                ys = [y_top_all[iblk], y_top_all[iblk+1], y_bot_all[iblk], y_bot_all[iblk+1]]
-                vs = [v_top_all[iblk], v_top_all[iblk+1], v_bot_all[iblk], v_bot_all[iblk+1]]
+                x_cn = [x1, x2, x1, x2]
+                y_cn = [y_top_all[iblk], y_top_all[iblk+1], y_bot_all[iblk], y_bot_all[iblk+1]]
+                v_cn = [v_top_all[iblk], v_top_all[iblk+1], v_bot_all[iblk], v_bot_all[iblk+1]]
                 xx_blk, yy_blk = xx[block_mask], yy[block_mask]
-                vv_blk = self.interp_block(xs, ys, vs, xx_blk, yy_blk)
-                vv[block_mask] = vv_blk
+                vp_blk = self.interp_block(x_cn, y_cn, v_cn, xx_blk, yy_blk)
+                vp[block_mask] = vp_blk
+                # If has pois, calculate vp contour
+                if self.has_pois:
+                    pois_blk = np.interp((x1+x2)/2.0, x_pois, pois_ly)
+                    vs_blk = self.vp2vs(vp_blk, pois_blk)
+                    vs[block_mask] = vs_blk
 
-        return xx, yy, vv
+        return xx, yy, vp, vs
 
     def get_v_section(self, x):
-        ys = []
-        vs = []
+        y = []
+        vp = []
         for ily in range(len(self.model)-1):
             ly_cur, ly_next = self.model[ily], self.model[ily+1]
             x_top, x_bot = ly_cur.depth.x, ly_next.depth.x
             y_top, y_bot = ly_cur.depth.y, ly_next.depth.y
             x_v_top, x_v_bot = ly_cur.v_top.x, ly_cur.v_bot.x
             v_top, v_bot = ly_cur.v_top.y, ly_cur.v_bot.y
-            ys.extend([np.interp(x, x_top, y_top), np.interp(x, x_bot, y_bot)-1e-3])
-            vs.extend([np.interp(x, x_v_top, v_top), np.interp(x, x_v_bot, v_bot)])
-        return np.array(ys), np.array(vs)
+            y.extend([np.interp(x, x_top, y_top), np.interp(x, x_bot, y_bot)])
+            vp.extend([np.interp(x, x_v_top, v_top), np.interp(x, x_v_bot, v_bot)])
+        return np.array(y), np.array(vp)
+
+    def get_section_data(self, x):
+        """Get section data, including vp, vs and pois"""
+        y, vp, vs, pois = [], [], [], []
+        for ily in range(len(self.model)-1):
+            ly_cur, ly_next = self.model[ily], self.model[ily+1]
+            x_top, x_bot = ly_cur.depth.x, ly_next.depth.x
+            y_top, y_bot = ly_cur.depth.y, ly_next.depth.y
+            x_v_top, x_v_bot = ly_cur.v_top.x, ly_cur.v_bot.x
+            v_top, v_bot = ly_cur.v_top.y, ly_cur.v_bot.y
+
+            y_sec = [np.interp(x, x_top, y_top), np.interp(x, x_bot, y_bot)]
+            vp_sec = [np.interp(x, x_v_top, v_top), np.interp(x, x_v_bot, v_bot)]
+            y.extend(y_sec)
+            vp.extend(vp_sec)
+            if self.has_pois:
+                x_pois, pois_ly = ly_cur.pois['x'], ly_cur.pois['y']
+                pois_sec = [np.interp(x, x_pois, pois_ly)] * 2
+                vs_sec = self.vp2vs(np.array(vp_sec), np.array(pois_sec))
+                pois.extend(pois_sec)
+                vs.extend(vs_sec)
+        return np.array(y), np.array(vp), np.array(vs), np.array(pois)

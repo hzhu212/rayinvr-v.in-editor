@@ -7,6 +7,7 @@ from tkinter import filedialog, messagebox
 import traceback
 
 from definitions import ROOT_DIR
+from globals_ import session, history
 from ploter import ModelPloter
 from util import ScrollText, get_file_logger
 from velocity import VelocityFrame
@@ -298,6 +299,13 @@ class MainFrame(ttk.Frame):
         self.vin_path = os.path.normpath(p)
         self.set_title(self.vin_path)
         self.ploter.open()
+        # Handle session and history
+        if self.vin_path in history.get('recent_opens'):
+            session.update(history.get_session_data(self.vin_path))
+        else:
+            session.clear()
+            session.set('file', self.vin_path)
+        history.merge_session(session)
 
     def reload(self):
         """Dialog when reloading current v.in file"""

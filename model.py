@@ -1,4 +1,5 @@
 import copy
+import numpy as np
 import os
 import re
 
@@ -289,31 +290,32 @@ class Model(object):
         self._data = data if data else []
         self._end_layer_str = ''
 
-    def loads(self, model_string):
+    @classmethod
+    def loads(cls, model_string):
         """Load model from string"""
+        model = cls()
         lines = model_string.strip().split('\n')
         if int(lines[0].lstrip()[:2]) != 1:
             raise ValueError('The first layer number of a model should be "1".')
         if len(lines)%3 != 2:
             raise ValueError('There should be 2 ending lines at the end of v.in file.')
-        self._end_layer_str = '\n'.join(lines[-2:]) + '\n'
+        model._end_layer_str = '\n'.join(lines[-2:]) + '\n'
         current_layer = 1
         in_layer = []
         for i in range(len(lines)//3+1):
             line1 = lines[3*i]
             if int(line1.lstrip()[:2]) != current_layer:
-                self._data.append(Layer.loads('\n'.join(in_layer)))
+                model._data.append(Layer.loads('\n'.join(in_layer)))
                 in_layer.clear()
                 current_layer += 1
             in_layer.extend(lines[3*i:3*(i+1)])
+        return model
 
     @classmethod
     def load(cls, path_vin):
         """Load model from v.in file."""
-        model = cls()
         with open(path_vin, 'r') as f:
-            model.loads(f.read())
-        return model
+            return cls.loads(f.read())
 
     def _end_layer(self):
         """Generate the trailing 2 lines at the end of the v.in file"""
@@ -567,3 +569,87 @@ class NodeIndex(object):
         if model.get_node(prev_node) is None:
             return None
         return prev_node
+
+
+class ModelProcessor():
+    """Model processor"""
+    # How fine is the grid data for velocity contouring
+    NGRIDX = 1000
+    NGRIDY = 1000
+
+    def __init__(self, model):
+        self.model = model
+
+    def get_vp_data(self):
+        """Get Vp data"""
+        data = []
+        for ily in range(len(self.model)-1):
+            ly_cur, ly_next = self.model[ily], self.model[ily+1]
+            x_top, x_bot = ly_cur.depth.x, ly_next.depth.x
+            y_top, y_bot = ly_cur.depth.y, ly_next.depth.y
+            x_v_top, x_v_bot = ly_cur.v_top.x, ly_cur.v_bot.x
+            y_v_top = np.interp(x_v_top, x_top, y_top)
+            y_v_bot = np.interp(x_v_bot, x_bot, y_bot)
+            data.append(([x_v_top, y_v_top], [x_v_bot, y_v_bot]))
+        return data
+
+    @staticmethod
+    def interp_block(xs, ys, vs, xx, yy):
+        """velocity interpolating inside a block in rayinvr model"""
+        x1, x2, x3, x4 = tuple(xs)
+        y1, y2, y3, y4 = tuple(ys)
+        v1, v2, v3, v4 = tuple(vs)
+        assert x1 == x3 and x2 == x4, 'block should be a trapezoidal in vertical'
+        y_top = np.interp(xx, [x1, x2], [y1, y2])
+        v_top = np.interp(xx, [x1, x2], [v1, v2])
+        y_bot = np.interp(xx, [x3, x4], [y3, y4])
+        v_bot = np.interp(xx, [x3, x4], [v3, v4])
+        vv = (v_bot - v_top) * (yy - y_top) / (y_bot - y_top) + v_top
+        return vv
+
+    def get_v_contour(self):
+        """interpolate velocity block by block"""
+        xlim, ylim = self.model.xlim, self.model.ylim
+        x = np.linspace(xlim[0], xlim[1], self.NGRIDX)
+        y = np.linspace(ylim[0], ylim[1], self.NGRIDY)
+        xx, yy = np.meshgrid(x, y)
+        vv = np.full(xx.shape, np.nan)
+
+        for ily in range(len(self.model)-1):
+            ly_cur, ly_next = self.model[ily], self.model[ily+1]
+            x_top, x_bot = ly_cur.depth.x, ly_next.depth.x
+            y_top, y_bot = ly_cur.depth.y, ly_next.depth.y
+            x_v_top, x_v_bot = ly_cur.v_top.x, ly_cur.v_bot.x
+            v_top, v_bot = ly_cur.v_top.y, ly_cur.v_bot.y
+
+            x_all = sorted(list(set(np.hstack([x_top, x_bot, x_v_top, x_v_bot]))))
+            y_top_all = np.interp(x_all, x_top, y_top)
+            y_bot_all = np.interp(x_all, x_bot, y_bot)
+            v_top_all = np.interp(x_all, x_v_top, v_top)
+            v_bot_all = np.interp(x_all, x_v_bot, v_bot)
+
+            layer_mask = (np.interp(xx, x_top, y_top) <= yy) & (yy < np.interp(xx, x_bot, y_bot))
+            for iblk in range(len(x_all)-1):
+                x1, x2 = x_all[iblk], x_all[iblk+1]
+                block_mask = layer_mask & (x1 <= xx) & (xx <= x2)
+                xs = [x1, x2, x1, x2]
+                ys = [y_top_all[iblk], y_top_all[iblk+1], y_bot_all[iblk], y_bot_all[iblk+1]]
+                vs = [v_top_all[iblk], v_top_all[iblk+1], v_bot_all[iblk], v_bot_all[iblk+1]]
+                xx_blk, yy_blk = xx[block_mask], yy[block_mask]
+                vv_blk = self.interp_block(xs, ys, vs, xx_blk, yy_blk)
+                vv[block_mask] = vv_blk
+
+        return xx, yy, vv
+
+    def get_v_section(self, x):
+        ys = []
+        vs = []
+        for ily in range(len(self.model)-1):
+            ly_cur, ly_next = self.model[ily], self.model[ily+1]
+            x_top, x_bot = ly_cur.depth.x, ly_next.depth.x
+            y_top, y_bot = ly_cur.depth.y, ly_next.depth.y
+            x_v_top, x_v_bot = ly_cur.v_top.x, ly_cur.v_bot.x
+            v_top, v_bot = ly_cur.v_top.y, ly_cur.v_bot.y
+            ys.extend([np.interp(x, x_top, y_top), np.interp(x, x_bot, y_bot)-1e-3])
+            vs.extend([np.interp(x, x_v_top, v_top), np.interp(x, x_v_bot, v_bot)])
+        return np.array(ys), np.array(vs)

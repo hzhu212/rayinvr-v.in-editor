@@ -376,7 +376,7 @@ class AboutFrame(ttk.Frame):
 
     def create_widgets(self):
         self.master.title('v.in editor - About')
-        self.master.geometry('300x100+500+200')
+        self.master.geometry('320x100+500+200')
         self.master.rowconfigure(0, weight=1)
         self.master.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
@@ -395,12 +395,12 @@ class MainFrameProxy(object):
         self.tk_variables = ('dx_sm', 'dx_lg', 'dy_sm', 'dy_lg', 'pick')
         self.allowed_attrs = ('fig', 'ax', 'canvas', 'vin_path', 'echo')
 
-    def __getattr__(self, attr):
-        if attr in self.tk_variables:
-            return self.window.settings[attr].get()
-        if attr in self.allowed_attrs:
-            return getattr(self.window, attr)
-        raise AttributeError('Attribute "%s" is not allowed by "MainFrameProxy"' %attr)
+    def __getattr__(self, name):
+        if name in self.tk_variables:
+            return self.window.settings[name].get()
+        if name in self.allowed_attrs:
+            return getattr(self.window, name)
+        raise AttributeError('Attribute "%s" is not allowed by %s' %(name, type(self).__name__))
 
     def bind(self, *args, **kw):
         return self.window.bind(*args, **kw)

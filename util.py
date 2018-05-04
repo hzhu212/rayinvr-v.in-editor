@@ -54,25 +54,29 @@ class ScrollText(tk.Frame):
 
 class Delegator(object):
     """Delegator Base Class"""
-    def __init__(self, delegate=None):
+    def __init__(self, delegate=None, allowed_attrs=None):
         self.delegate = delegate
+        self.allowed_attrs = allowed_attrs
         # Cache is used to only remove added attributes when changing the delegate.
-        self.__cache = set()
+        self._cache = set()
 
     def __getattr__(self, name):
+        if (self.allowed_attrs is not None) and (name not in self.allowed_attrs):
+            raise AttributeError(
+                'Attribute "%s" is not allowed by %s' %(name, type(self).__name__))
         attr = getattr(self.delegate, name)
         setattr(self, name, attr)
-        self.__cache.add(name)
+        self._cache.add(name)
         return attr
 
     def resetcache(self):
         """Removes added attributes while leaving original attributes."""
-        for key in self.__cache:
+        for key in self._cache:
             try:
                 delattr(self, key)
             except AttributeError:
                 pass
-        self.__cache.clear()
+        self._cache.clear()
 
     def setdelegate(self, delegate):
         """Reset attributes and change delegate."""

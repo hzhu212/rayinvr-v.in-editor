@@ -4,7 +4,7 @@ import numpy as np
 import os
 
 from definitions import ROOT_DIR
-from util import get_file_logger, ModelVelocityInterpDelegator
+from util import get_file_logger, Delegator
 from model import Model, NodeIndex
 
 
@@ -363,7 +363,6 @@ class ModelPloter(BasePloter):
         self.ax.cla()
         self.lines.clear()
         self.selected.clear()
-        self.v_delegator = ModelVelocityInterpDelegator(self)
         self.set_axes()
         self.load_model()
 
@@ -483,38 +482,97 @@ class ModelPloter(BasePloter):
 # ------------------------------------------------------------ #
 # velocity plot
 # ------------------------------------------------------------ #
-class VPloter(object):
-    """Velocity ploter"""
-    def __init__(self, window, model):
-        self.wd = window
-        self.model = model
-        self.canvas = self.wd.canvas
-        self.fig = self.wd.fig
-        self.ax = self.wd.ax
-        self.v_delegator = ModelVelocityInterpDelegator(self)
-        self.line_style = dict(
-            linestyle='--', color='k', linewidth=1, marker='o', markersize=3,
-            markeredgewidth=1, markerfacecolor='None')
+class VContourPlotDelegator(Delegator):
+    """Delegator for plotting velocity contours"""
 
-    def set_axes(self):
+    def __init__(self, delegate, allowed_attrs=None):
+        super().__init__(delegate, allowed_attrs)
+        self.init_plot()
+
+    def init_plot(self):
+        self.ax = self.fig.add_subplot(111)
+        self.ax.tick_params(axis='both', which='major', labelsize=9)
+        self.ax.tick_params(axis='both', which='minor', labelsize=8)
         self.ax.invert_yaxis()
         self.ax.set_xlabel('X (km)')
         self.ax.set_ylabel('Depth (km)')
 
-    def plot_model(self):
-        """Plot the model"""
-        for layer in self.model:
-            self.ax.plot(layer.depth[0], layer.depth[1], **self.line_style)
+    def plot_vmodel(self):
+        """Plot velocity nodes"""
+        for layer in self.model_proc.model:
+            self.ax.plot(layer.depth[0], layer.depth[1], 'k.:')
+        vp_data = self.model_proc.get_vp_data()
+        for top_data, bot_data in vp_data:
+            x_v_top, y_v_top = tuple(top_data)
+            x_v_bot, y_v_bot = tuple(bot_data)
+            self.ax.plot(x_v_top, y_v_top, color='k', marker=11, markerfacecolor='white', linestyle='None')
+            self.ax.plot(x_v_bot, y_v_bot, color='k', marker=10, markerfacecolor='white', linestyle='None')
 
-    def plot_velocity_contour(self, mode=1):
-        self.set_axes()
-        xx, yy, vv = self.v_delegator.get_grid_data()
+    def plot_velocity_contour(self):
+        xx, yy, vv = self.model_proc.get_v_contour()
         p = self.ax.imshow(
             np.flip(vv, axis=0), cmap='jet', aspect='auto',
-            extent=self.model.xlim+self.model.ylim)
+            extent=self.model_proc.model.xlim+self.model_proc.model.ylim)
         self.ax.invert_yaxis()
         cbar = self.fig.colorbar(p, shrink=0.8, fraction=0.1, pad=0.03)
         cbar.ax.set_ylabel('velocity (km/s)')
         cbar.ax.invert_yaxis()
-        self.plot_model()
-        self.canvas.draw()
+        self.plot_vmodel()
+
+
+class VSectionPlotDelegator(Delegator):
+    """Delegator for plotting velocity sections"""
+
+    TITLES = ('Vp', 'Vs', 'Poisson')
+    X_LABELS = ('Vp (km/s)', 'Vs (km/s)', 'Poisson')
+    Y_LABEL = 'mbsf'
+
+    def __init__(self, delegate, allowed_attrs=None):
+        super().__init__(delegate, allowed_attrs)
+        self.init_plot()
+
+    def init_plot(self):
+        self.axs[0].set_ylabel(self.Y_LABEL)
+        self.axs[0].invert_yaxis()
+        self.axs[2].set_xlim(left=0, right=0.5)
+        for i, ax in enumerate(self.axs):
+            ax.tick_params(axis='both', which='major', labelsize=9)
+            ax.tick_params(axis='both', which='minor', labelsize=8)
+            ax.set_xlabel(self.X_LABELS[i])
+            ax.xaxis.tick_top()
+            ax.xaxis.set_label_position('top')
+        self.curves = [None] * 3
+
+    def plot_sections(self, section_x):
+        self.plot_vp_section(section_x)
+        self.plot_vp_section(section_x)
+        self.plot_pois_section(section_x)
+
+    def plot_vp_section(self, section_x):
+        y, v = self.model_proc.get_v_section(section_x)
+        y = y * 1e3
+        if self.curves[0] is None:
+            self.curves[0], = self.axs[0].plot(v, y, 'r-', linewidth=1)
+        else:
+            self.curves[0].set_data(v, y)
+        self.axs[0].set_ylim(top=0, bottom=1.05*y[-1])
+
+    def plot_vs_section(self, section_x):
+        pass
+
+    def plot_pois_section(self, section_x):
+        pass
+
+    def flatten_by_layer(self, idx):
+        y = self.curves[0].get_ydata()
+        if y[2*idx] == 0:
+            return
+        y_new = y - y[2*idx]
+        # Reset depth data
+        for curve in self.curves:
+            if curve is None:
+                continue
+            curve.set_ydata(y_new)
+        # Reset depth limit
+        self.axs[0].set_ylim(top=0, bottom=1.05*y_new[-1])
+        self.fig.canvas.draw()

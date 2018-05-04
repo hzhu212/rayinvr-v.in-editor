@@ -1,3 +1,4 @@
+import json
 import logging
 import numpy as np
 import os
@@ -79,123 +80,122 @@ class Delegator(object):
         self.delegate = delegate
 
 
-class ModelVelocityInterpDelegator(Delegator):
-    """Interpolate Model Velocity for Contouring"""
+class BaseConfigManager(object):
+    """Base class for managing json config"""
+    def __init__(self):
+        self.autosave = None
+        self.store = None
+        self.data = None
 
-    # How fine is the grid data for velocity contouring
-    NGRIDX = 1000
-    NGRIDY = 1000
+    def load(self):
+        with open(self.store, 'r', encoding='utf8') as f:
+            try:
+                return json.load(f)
+            except json.decoder.JSONDecodeError:
+                return None
 
-    def __init__(self, delegate):
-        super().__init__(delegate)
-        self.logger = get_file_logger(
-            name = type(self).__name__,
-            file = os.path.join(ROOT_DIR, 'log', 'util.log'),
-            level = 'debug')
+    def save(self):
+        with open(self.store, 'w', encoding='utf8') as f:
+            json.dump(self.data, f, ensure_ascii=False, indent=4)
 
-    @staticmethod
-    def get_perspective_transform(points_orig, points_dest):
-        """Get perspective transform matrix"""
-        A = []
-        for p, p_prime in zip(points_orig, points_dest):
-            A.append([p[0], p[1], 1, 0, 0, 0, -p_prime[0]*p[0], -p_prime[0]*p[1]])
-            A.append([0, 0, 0, p[0], p[1], 1, -p_prime[1]*p[0], -p_prime[1]*p[1]])
-        A = np.array(A)
-        b = np.array(points_dest).flatten()
-        r = np.linalg.solve(A, b)
-        res = np.append(r, 1).reshape((3, 3))
-        return res
+    def __str__(self):
+        return self.data.__str__()
 
-    @staticmethod
-    def apply_perspective_transform(ptm, points):
-        """Apply perspective transform for points"""
-        n_points = len(points)
-        points = np.hstack([points, np.ones((n_points, 1))])
-        res = ptm.dot(points.T).T
-        res = (res / res[:,-1:])[:,:2]
-        return res
+    def __getitem__(self, *args, **kw):
+        return self.data.__getitem__(*args, **kw)
 
+    def __setitem__(self, *args, **kw):
+        self.data.__setitem__(*args, **kw)
+        if self.autosave:
+            self.save()
 
-    @staticmethod
-    def interp_block(xs, ys, vs, xx, yy):
-        """velocity interpolating inside a block in rayinvr model"""
-        x1, x2, x3, x4 = tuple(xs)
-        y1, y2, y3, y4 = tuple(ys)
-        v1, v2, v3, v4 = tuple(vs)
-        assert x1 == x3 and x2 == x4, 'block should be a trapezoidal in vertical'
-        y_top = np.interp(xx, [x1, x2], [y1, y2])
-        v_top = np.interp(xx, [x1, x2], [v1, v2])
-        y_bot = np.interp(xx, [x3, x4], [y3, y4])
-        v_bot = np.interp(xx, [x3, x4], [v3, v4])
-        vv = (v_bot - v_top) * (yy - y_top) / (y_bot - y_top) + v_top
-        return vv
+    def __getattr__(self, attr):
+        print('%s getattr: %s' %(type(self).__name__, attr))
+        return getattr(self.data, attr)
+
+    def update(self, *args, **kw):
+        self.data.update(*args, **kw)
+        if self.autosave:
+            self.save()
+
+    def get(self, key):
+        return self.data[key]
+
+    def set(self, key, value):
+        self.data[key] = value
+        if self.autosave:
+            self.save()
 
 
-    def get_grid_data(self):
-        """interpolate velocity block by block"""
-        xlim, ylim = self.model.xlim, self.model.ylim
-        x = np.linspace(xlim[0], xlim[1], self.NGRIDX)
-        y = np.linspace(ylim[0], ylim[1], self.NGRIDY)
-        xx, yy = np.meshgrid(x, y)
-        vv = np.full(xx.shape, np.nan)
-
-        for ily in range(len(self.model)-1):
-            ly_cur, ly_next = self.model[ily], self.model[ily+1]
-            x_top, x_bot = ly_cur.depth.x, ly_next.depth.x
-            y_top, y_bot = ly_cur.depth.y, ly_next.depth.y
-            x_v_top, x_v_bot = ly_cur.v_top.x, ly_cur.v_bot.x
-            v_top, v_bot = ly_cur.v_top.y, ly_cur.v_bot.y
-
-            x_all = sorted(list(set(np.hstack([x_top, x_bot, x_v_top, x_v_bot]))))
-            y_top_all = np.interp(x_all, x_top, y_top)
-            y_bot_all = np.interp(x_all, x_bot, y_bot)
-            v_top_all = np.interp(x_all, x_v_top, v_top)
-            v_bot_all = np.interp(x_all, x_v_bot, v_bot)
-
-            layer_mask = (np.interp(xx, x_top, y_top) <= yy) & (yy < np.interp(xx, x_bot, y_bot))
-            for iblk in range(len(x_all)-1):
-                x1, x2 = x_all[iblk], x_all[iblk+1]
-                block_mask = layer_mask & (x1 <= xx) & (xx <= x2)
-                xs = [x1, x2, x1, x2]
-                ys = [y_top_all[iblk], y_top_all[iblk+1], y_bot_all[iblk], y_bot_all[iblk+1]]
-                vs = [v_top_all[iblk], v_top_all[iblk+1], v_bot_all[iblk], v_bot_all[iblk+1]]
-                xx_blk, yy_blk = xx[block_mask], yy[block_mask]
-                vv_blk = self.interp_block(xs, ys, vs, xx_blk, yy_blk)
-                vv[block_mask] = vv_blk
-
-        return xx, yy, vv
+class SessionManager(BaseConfigManager):
+    """Manage application session"""
+    def __init__(self, autosave=False):
+        self.autosave = autosave
+        self.store = os.path.join(ROOT_DIR, 'config', 'session')
+        self.data = {
+            'file': '',
+            'pois': '',
+        }
+        if self.autosave:
+            self.save
 
 
-    def fill_velocity(self):
-        """fill velocity for all nodes, includeing depth nodes, velocity nodes
-        and derived nodes"""
-        x_acc, y_acc, v_acc = [], [], []
-        for ily in range(len(self.model)-1):
-            ly_cur, ly_next = self.model[ily], self.model[ily+1]
-            x_top, x_bot = ly_cur.depth.x, ly_next.depth.x
-            y_top, y_bot = ly_cur.depth.y, ly_next.depth.y
-            x_v_top, x_v_bot = ly_cur.v_top.x, ly_cur.v_bot.x
-            v_top, v_bot = ly_cur.v_top.y, ly_cur.v_bot.y
+class HistoryManager(BaseConfigManager):
+    """Manage application history"""
+    def __init__(self, autosave=False):
+        self.autosave = autosave
+        self.store = os.path.join(ROOT_DIR, 'config', 'history')
+        self.data = {
+            'recent_opens': [],
+            'sessions': [],
+        }
+        if os.path.isfile(self.store):
+            temp = self.load()
+            if temp: self.data = temp
+        else:
+            self.save()
 
-            x_all = sorted(list(set(np.hstack([x_top, x_bot, x_v_top, x_v_bot]))))
-            y_top_all = np.interp(x_all, x_top, y_top)
-            y_bot_all = np.interp(x_all, x_bot, y_bot)
-            v_top_all = np.interp(x_all, x_v_top, v_top)
-            v_bot_all = np.interp(x_all, x_v_bot, v_bot)
+    def merge_session(self, sess):
+        """Merge the most recent session to history"""
+        sess_data = sess.data.copy()
+        file = sess_data['file']
+        if file in self.data['recent_opens']:
+            idx = self.data['recent_opens'].index(file)
+            self.data['recent_opens'].pop(idx)
+            self.data['recent_opens'].insert(0, file)
+            self.data['sessions'].pop(idx)
+            self.data['sessions'].insert(0, sess_data)
+        else:
+            self.data['recent_opens'].insert(0, file)
+            self.data['sessions'].insert(0, sess_data)
 
-            x_acc.extend([x_all, x_all])
-            y_acc.extend([y_top_all, y_bot_all-0.0001])
-            v_acc.extend([v_top_all, v_bot_all])
+        if self.autosave:
+            self.save()
 
-        x, y, v = np.hstack(x_acc), np.hstack(y_acc), np.hstack(v_acc)
-        return x, y, v
+    def get_session(self, sid):
+        """Get history session by sid. `sid` is a integer(the index of recently opened files)
+        or a recently opened file name"""
+        if isinstance(sid, int):
+            if sid >= len(self.data['sessions']):
+                return None
+            return self.data['sessions'][sid]
 
-    def get_grid_data2(self):
-        """gridding irregularly spaced velocity data"""
-        x, y, v = self.fill_velocity()
-        xlim, ylim = self.model.xlim, self.model.ylim
-        xx = np.linspace(xlim[0], xlim[1], self.NGRIDX)
-        yy = np.linspace(ylim[0], ylim[1], self.NGRIDY)
-        xx, yy = np.meshgrid(xx, yy)
-        vv = griddata((x, y), v, (xx, yy), method='linear')
-        return xx, yy, vv
+        if sid not in self.data['recent_opens']:
+            return None
+        idx = self.data['recent_opens'].index(sid)
+        return self.data['sessions'][idx]
+
+    def truncate(self, keep=10):
+        """Clear old history but keeping the newest `keep` history"""
+        self.data['recent_opens'] = self.data['recent_opens'][:keep]
+        self.data['sessions'] = self.data['sessions'][:keep]
+        if self.autosave:
+            self.save()
+
+    def clear(self):
+        self.data = {
+            'recent_opens': [],
+            'sessions': [],
+        }
+        if self.autosave:
+            self.save()

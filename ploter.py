@@ -507,11 +507,25 @@ class VContourPlotDelegator(Delegator):
             self.ax.plot(x_v_top, y_v_top, color='k', marker=11, markerfacecolor='white', linestyle='None')
             self.ax.plot(x_v_bot, y_v_bot, color='k', marker=10, markerfacecolor='white', linestyle='None')
 
+    def get_format_coord(self, xx, yy, zz):
+        def format_coord(x, y):
+            xrow, ycol = xx[0,:], yy[:,0]
+            icol = np.searchsorted(xrow, x)
+            irow = np.searchsorted(ycol, y)
+            if (0 < icol < len(xrow)) and (0 < irow < len(ycol)):
+                z = zz[irow, icol]
+            else:
+                z = np.nan
+            return 'x=%.4f    y=%.4f    z=%.4f' %(x, y, z)
+        return format_coord
+
     def plot_velocity_contour(self):
         xx, yy, vp, vs = self.model_proc.get_v_contour()
-        p = self.ax.pcolormesh(xx, yy, vp, cmap='jet')
+        zz = vp
+        self.ax.format_coord = self.get_format_coord(xx, yy, zz)
+        p = self.ax.pcolormesh(xx, yy, zz, cmap='jet')
         # p = self.ax.imshow(
-        #     np.flip(vp, axis=0), cmap='jet', aspect='auto',
+        #     np.flip(zz, axis=0), cmap='jet', aspect='auto',
         #     extent=self.model_proc.model.xlim+self.model_proc.model.ylim)
         # self.ax.invert_yaxis()
         cbar = self.fig.colorbar(p, shrink=0.8, fraction=0.1, pad=0.03)

@@ -164,24 +164,49 @@ class MainFrame(ttk.Frame):
     def create_menu(self):
         menubar = tk.Menu(self)
         self.master.config(menu=menubar)
-        filemenu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="File", menu=filemenu)
-        filemenu.add_command(label="Open", command=self.open)
-        filemenu.add_command(label="Save", command=self.save)
-        filemenu.add_command(label="Save As", command=self.save_as)
-        filemenu.add_separator()
-        filemenu.add_command(label="Exit", command=self.exit)
+
+        self.filemenu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label='File', menu=self.filemenu)
+        self.filemenu.add_command(label='Open', command=self.open)
+        self.recentmenu = self.create_recent_opens_menu()
+        self.filemenu.add_command(label='Save', command=self.save)
+        self.filemenu.add_command(label='Save As', command=self.save_as)
+        self.filemenu.add_separator()
+        self.filemenu.add_command(label='Exit', command=self.exit)
 
         editmenu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Edit", menu=editmenu)
-        editmenu.add_command(label="Undo", command=self.not_implement)
-        editmenu.add_command(label="Redo", command=self.not_implement)
+        menubar.add_cascade(label='Edit', menu=editmenu)
+        editmenu.add_command(label='Undo', command=self.not_implement)
+        editmenu.add_command(label='Redo', command=self.not_implement)
 
         helpmenu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Help", menu=helpmenu)
-        helpmenu.add_command(label="Help", command=self.show_help)
-        helpmenu.add_command(label="About", command=self.show_about)
+        menubar.add_cascade(label='Help', menu=helpmenu)
+        helpmenu.add_command(label='Help', command=self.show_help)
+        helpmenu.add_command(label='About', command=self.show_about)
 
+    def create_recent_opens_menu(self):
+        def clear_recent_opens():
+            history.clear()
+            self.update_recent_opens_menu()
+
+        recentmenu = tk.Menu(self.filemenu, tearoff=0)
+        self.filemenu.add_cascade(label='Open Recent', menu=recentmenu)
+        recentmenu.add_command(label='Clear Items', command=clear_recent_opens)
+        recentmenu.add_separator()
+        for file_path in history.get('recent_opens')[:10]:
+            def closure(file_path):
+                recentmenu.add_command(
+                    label=file_path, command=lambda: self.open(file_path))
+            closure(file_path)
+        return recentmenu
+
+    def update_recent_opens_menu(self):
+        self.recentmenu.delete(2, tk.END)
+        for file_path in history.get('recent_opens')[1:10]:
+            def closure(file_path):
+                self.recentmenu.add_command(
+                    label=file_path, command=lambda: self.open(file_path))
+            closure(file_path)
 
     @staticmethod
     def gen_container(parent, row_weight=None, col_weight=None):
@@ -279,24 +304,30 @@ class MainFrame(ttk.Frame):
     def show_error(self, *args, **kw):
         messagebox.showerror(*args, **kw)
 
-    def open(self):
+    def open(self, file_path=None):
         """Open v.in file"""
-        if self.ploter.is_modified():
-            okay = messagebox.askokcancel(
-                'Warning', 'Do you want to open a new v.in file?\n'
-                'Current modification will be lost!')
-            if not okay:
+        if file_path is None:
+            if self.ploter.is_modified():
+                okay = messagebox.askokcancel(
+                    'Warning', 'Do you want to open a new v.in file?\n'
+                    'Current modification will be lost!')
+                if not okay:
+                    return
+            initialdir = os.path.join(ROOT_DIR, 'vins')
+            recent_opens = history.get('recent_opens')
+            if recent_opens:
+                initialdir = os.path.dirname(recent_opens[0])
+            file_path = filedialog.askopenfilename(
+                defaultextension='.in',
+                filetypes=[('rayinvr input file', '.in'), ('any type', '.*')],
+                initialdir=initialdir,
+                parent=self,
+                title='Open v.in')
+            file_path = file_path.strip()
+            if not file_path:
                 return
-        p = filedialog.askopenfilename(
-            defaultextension='.in',
-            filetypes=[('rayinvr input file', '.in'), ('any type', '.*')],
-            initialdir=os.path.join(ROOT_DIR, 'vins'),
-            parent=self,
-            title='Open v.in')
-        p = p.strip()
-        if not p:
-            return
-        self.vin_path = os.path.normpath(p)
+        self.vin_path = os.path.normpath(file_path)
+        self.logger.debug('Opening file %r' %self.vin_path)
         self.set_title(self.vin_path)
         self.ploter.open()
         # Handle session and history
@@ -306,6 +337,7 @@ class MainFrame(ttk.Frame):
             session.clear()
             session.set('file', self.vin_path)
         history.merge_session(session)
+        self.update_recent_opens_menu()
 
     def reload(self):
         """Dialog when reloading current v.in file"""

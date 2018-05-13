@@ -214,12 +214,12 @@ class HistoryManager(BaseConfigManager):
 def parse_pois_str(pois_str):
     """Parse poission string copied from r.in.
     A poission string consists of 4 parts:
-    1. pois - an array containing the value of Poisson's ratio for each model layer.
-    2. poisl, 3. poisb - arrays specifying the layers and block numbers, respectively,
+    1. pois - an array containing the value of Poisson's ratio for each model layer.
+    2. poisl, 3. poisb - arrays specifying the layers and block numbers, respectively,
         of model trapezoids within which Poisson's ratio is modified over that given
         by pois using the array poisbl; for poisb, the trapezoids with a layer are
         numbered from left to right.
-    4. poisbl - an array containing the value of Poisson's ratio for the model trapezoids
+    4. poisbl - an array containing the value of Poisson's ratio for the model trapezoids
         specified in the arrays poisl and poisb overriding the values assigned using
         the array pois.
     The last 3 parts are optional.

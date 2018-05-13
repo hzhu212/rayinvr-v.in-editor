@@ -191,22 +191,25 @@ class MainFrame(ttk.Frame):
 
         recentmenu = tk.Menu(self.filemenu, tearoff=0)
         self.filemenu.add_cascade(label='Open Recent', menu=recentmenu)
-        recentmenu.add_command(label='Clear Items', command=clear_recent_opens)
-        recentmenu.add_separator()
         for file_path in history.get('recent_opens')[:10]:
             def closure(file_path):
                 recentmenu.add_command(
                     label=file_path, command=lambda: self.open(file_path))
             closure(file_path)
+
+        recentmenu.add_separator()
+        recentmenu.add_command(label='Clear Items', command=clear_recent_opens)
         return recentmenu
 
     def update_recent_opens_menu(self):
-        self.recentmenu.delete(2, tk.END)
-        for file_path in history.get('recent_opens')[1:10]:
-            def closure(file_path):
-                self.recentmenu.add_command(
-                    label=file_path, command=lambda: self.open(file_path))
-            closure(file_path)
+        last_idx = self.recentmenu.index(tk.END)
+        if last_idx > 1:
+            self.recentmenu.delete(0, last_idx-2)
+        for idx, file_path in enumerate(history.get('recent_opens')[1:10]):
+            def closure(idx, file_path):
+                self.recentmenu.insert_command(
+                    idx, label=file_path, command=lambda: self.open(file_path))
+            closure(idx, file_path)
 
     @staticmethod
     def gen_container(parent, row_weight=None, col_weight=None):

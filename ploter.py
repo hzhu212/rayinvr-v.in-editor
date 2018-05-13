@@ -381,9 +381,8 @@ class ModelPloter(BasePloter):
             self.model = Model.load(self.wd.vin_path)
         except Exception as e:
             self.logger.exception(e)
-            self.wd.show_error('Error'
-                'The following error occured when loading model:"\n\n%s\n\n"'
-                'please checked the format of your v.in file'
+            self.wd.show_error(
+                'Error', 'The following error occured while loading model:\n"%s"\n\n'
                 %(', '.join(map(str, e.args))))
 
     def plot_model(self):

@@ -269,10 +269,10 @@ class MainFrame(ttk.Frame):
         # Pass key events to ploter
         self.ploter.on_key_release(event)
 
-    def set_title(self, text=None):
+    def set_subtitle(self, text=None):
         if not text:
             return
-        self.master.title(self.master.title() + ' - ' + text)
+        self.master.title('v.in editor - %s' %text)
 
     def reset_sliders(self):
         for name, value in zip(self.slider_names, self.slider_init_values):
@@ -328,7 +328,7 @@ class MainFrame(ttk.Frame):
                 return
         self.vin_path = os.path.normpath(file_path)
         self.logger.debug('Opening file %r' %self.vin_path)
-        self.set_title(self.vin_path)
+        self.set_subtitle(self.vin_path)
         self.ploter.open()
         # Handle session and history
         if self.vin_path in history.get('recent_opens'):

@@ -460,6 +460,9 @@ class MainFrameProxy(object):
 
 
 if __name__ == '__main__':
+    from ctypes import windll
+    windll.shcore.SetProcessDpiAwareness(1)
+
     root = tk.Tk()
     mf = MainFrame(root)
     mf.grid(row=0, column=0, sticky='nswe')

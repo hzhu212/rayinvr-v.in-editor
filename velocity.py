@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import os
 import tkinter as tk
 from tkinter import ttk
@@ -163,7 +163,7 @@ class VelocityContourFrame(ttk.Frame):
         # using grid geometry manager.
         toolbar_area = ttk.Frame(self)
         toolbar_area.grid(row=1, column=0, sticky='nswe')
-        toolbar = NavigationToolbar2TkAgg(canvas, toolbar_area)
+        toolbar = NavigationToolbar2Tk(canvas, toolbar_area)
         toolbar.update()
 
         # Side frame for controlling widgets
@@ -216,7 +216,7 @@ class VelocitySectionFrame(ttk.Frame):
         # using grid geometry manager.
         toolbar_area = ttk.Frame(self)
         toolbar_area.grid(row=1, column=0, sticky='nswe')
-        toolbar = NavigationToolbar2TkAgg(canvas, toolbar_area)
+        toolbar = NavigationToolbar2Tk(canvas, toolbar_area)
         toolbar.update()
 
         # Side frame for controlling widgets

@@ -328,7 +328,11 @@ class Model(object):
     def _end_layer(self):
         """Generate the trailing 2 lines at the end of the v.in file"""
         # return '%2i%9.3f\n%2i%9.3f\n' %(self.nlayer+1, 0, 0, 100)
-        return self._end_layer_str
+        origin_layer_number = self._end_layer_str.lstrip().split()[0]
+        layer_number_len = self._end_layer_str.index(origin_layer_number) + len(origin_layer_number)
+        origin_layer_number = self._end_layer_str[:layer_number_len]
+        new_layer_number = ('%' + str(layer_number_len) + 'd') % (self.nlayer + 1, )
+        return self._end_layer_str.replace(origin_layer_number, new_layer_number)
 
     def dumps(self):
         """Dump model into a string in the format of v.in."""

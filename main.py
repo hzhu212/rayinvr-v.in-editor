@@ -9,8 +9,9 @@ import traceback
 from definitions import ROOT_DIR
 from globals_ import session, history
 from ploter import ModelPloter
-from util import ScrollText, get_file_logger
+from util import ScrollText, TextWindow, get_file_logger
 from velocity import VelocityFrame
+
 
 
 help_msg = """## Mouse Buttons
@@ -50,6 +51,9 @@ help_msg = """## Mouse Buttons
 - pick: the pick size of cursor. A smaller pick size makes it easer to pick a
       single node, but harder to pick the whole line.
 """
+
+about_msg = 'v.in editor by <zhuhe212@163.com>'
+
 
 
 class MainFrame(ttk.Frame):
@@ -292,11 +296,10 @@ class MainFrame(ttk.Frame):
         vf.bind_model(self.ploter.model.copy())
 
     def show_help(self):
-        HelpFrame(tk.Toplevel())
+        TextWindow(text=help_msg, editable=False, title='v.in editor - Help', geometry='660x700+300+30')
 
     def show_about(self):
-        AboutFrame(tk.Toplevel())
-        # messagebox.showinfo('About', 'v.in editor by <zhuhe212@163.com>')
+        TextWindow(text=about_msg, editable=False, title='v.in editor - About', geometry='360x80+500+200')
 
     def show_info(self, *args, **kw):
         messagebox.showinfo(*args, **kw)
@@ -388,47 +391,6 @@ class MainFrame(ttk.Frame):
         err_msg = traceback.format_exception(etype, evalue, tb)
         err_msg = ''.join(err_msg)
         messagebox.showerror('Internal Error', err_msg)
-
-
-class HelpFrame(ttk.Frame):
-    """Help Window"""
-    def __init__(self, master):
-        super().__init__(master)
-        self.master = master
-        self.create_widgets()
-
-    def create_widgets(self):
-        self.master.title('v.in editor - Help')
-        self.master.geometry('660x700+300+30')
-        self.master.rowconfigure(0, weight=1)
-        self.master.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
-        self.grid(padx=20, pady=10, sticky='nswe')
-        text = tk.Text(self, bd=0, bg='#F0F0F0', font=('Consolas', 11))
-        text.grid(row=0, column=0, sticky='nswe')
-        text.insert(tk.END, help_msg)
-        text.config(state=tk.DISABLED)
-
-class AboutFrame(ttk.Frame):
-    """About Window"""
-    def __init__(self, master):
-        super().__init__(master)
-        self.master = master
-        self.create_widgets()
-
-    def create_widgets(self):
-        self.master.title('v.in editor - About')
-        self.master.geometry('320x100+500+200')
-        self.master.rowconfigure(0, weight=1)
-        self.master.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
-        self.grid(padx=20, pady=10, sticky='nswe')
-        text = tk.Text(self, bd=0, bg='#F0F0F0', font=('Consolas', 11))
-        text.grid(row=0, column=0, sticky='nswe')
-        text.insert(tk.END, 'v.in editor by <zhuhe212@163.com>')
-        text.config(state=tk.DISABLED)
 
 
 class MainFrameProxy(object):

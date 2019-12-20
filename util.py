@@ -5,6 +5,7 @@ import os
 import re
 from scipy.interpolate import griddata
 import tkinter as tk
+import tkinter.ttk as ttk
 
 from definitions import ROOT_DIR
 
@@ -51,6 +52,37 @@ class ScrollText(tk.Frame):
         self.text.delete('1.0', tk.END)
         self.text.insert(tk.END, string)
         self.text.config(state=tk.DISABLED)
+
+
+class TextWindow(tk.Frame):
+    """A Window contains only a text widget, mainly for showing message"""
+    def __init__(self, text='', editable=True, title='untitled', geometry='1125x740+300+100'):
+        master = tk.Toplevel()
+        super().__init__(master)
+        self.master = master
+        self.text = text
+        self.editable = editable
+        self.title = title
+        self.geometry = geometry
+        self.create_widgets()
+
+    def create_widgets(self):
+        self.master.title(self.title)
+        self.master.geometry(self.geometry)
+        self.master.rowconfigure(0, weight=1)
+        self.master.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+        self.grid(pady=(2, 0), sticky='nswe')
+        text_widget = tk.Text(self, bd=0, font=('Consolas', 11))
+        text_widget.grid(row=0, column=0, sticky='nswe')
+        scrollbar = ttk.Scrollbar(self, command=text_widget.yview)
+        scrollbar.grid(row=0, column=1, sticky='nswe')
+        text_widget['yscrollcommand'] = scrollbar.set
+
+        text_widget.insert(tk.END, self.text)
+        if not self.editable:
+            text_widget.config(state=tk.DISABLED)
 
 
 class Delegator(object):

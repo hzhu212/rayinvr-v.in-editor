@@ -1,61 +1,20 @@
 import figure_patch
-
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+
 import os
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog, messagebox
 import traceback
 
-from definitions import ROOT_DIR
 from globals_ import session, history
 from ploter import ModelPloter
 from util import ScrollText, TextWindow, get_file_logger
 from velocity import VelocityFrame
 
 
-
-help_msg = """## Mouse Buttons
-
-- left_click: pick node or layer.
-- ctrl+left_click: pick nodes in accumulation mode.
-
-## Hot Keys
-
-- up: move nodes up by distance of "dy_sm".
-- down: move nodes down by distance of "dy_sm".
-- left: move nodes left by distance of "dx_sm".
-- right: move nodes right by distance of "dx_sm".
-- ctrl+up/down/left/right: move nodes by larger distance of "dx_lg"/"dy_lg".
-- esc: clear all the selections.
-- n: select the Next node(s).
-- p: select the Previous node(s).
-- shift/ctrl+n: select the Next node(s) in accumulation mode.
-- shift/ctrl+p: select the Previous node(s) in accumulation mode.
-- i: Insert node(s) into the right side of selected node(s).
-- d/backspace/delete: Delete selected node(s).
-- ctrl+r: Reload current v.in file.
-- ctrl+s: Save the modified model to current v.in file.
-- v: open Velocity plot for selected layers. For all layers if no selection.
-      Hot keys above is available in v-plot too.
-- ctrl+i: Insert layer(s) under the layer(s) containing selected node(s).
-- ctrl+d: Delete layer(s) containing selected node(s).
-- ctrl+o: Open a new v.in file.
-- ctrl+shift+s: Save the modified model as ....
-
-## Variables
-
-- dx_sm: the small step length when moving node(s) in x axis.
-- dx_lg: the large step length when moving node(s) in x axis.
-- dy_sm: the small step length when moving node(s) in y axis.
-- dy_lg: the large step length when moving node(s) in y axis.
-- pick: the pick size of cursor. A smaller pick size makes it easer to pick a
-      single node, but harder to pick the whole line.
-"""
-
-about_msg = 'v.in editor by <zhuhe212@163.com>'
-
+cur_dir = os.path.dirname(os.path.abspath(__file__))
 
 
 class MainFrame(ttk.Frame):
@@ -65,7 +24,7 @@ class MainFrame(ttk.Frame):
         self.master = master
         self.logger = get_file_logger(
             name = type(self).__name__,
-            file = os.path.join(ROOT_DIR, 'log', 'main_window.log'),
+            file = os.path.join(cur_dir, 'log', 'main_window.log'),
             level = 'debug')
         self.init_variables()
         self.create_widgets()
@@ -298,10 +257,14 @@ class MainFrame(ttk.Frame):
         vf.bind_model(self.ploter.model.copy())
 
     def show_help(self):
-        TextWindow(text=help_msg, editable=False, title='v.in editor - Help', geometry='660x700+300+30')
+        with open(os.path.join(cur_dir, 'resource', 'help.txt'), 'r', encoding='utf8') as f:
+            text = f.read()
+        TextWindow(text=text, editable=False, title='v.in editor - Help', geometry='660x700+300+30')
 
     def show_about(self):
-        TextWindow(text=about_msg, editable=False, title='v.in editor - About', geometry='360x80+500+200')
+        with open(os.path.join(cur_dir, 'resource', 'about.txt'), 'r', encoding='utf8') as f:
+            text = f.read()
+        TextWindow(text=text, editable=False, title='v.in editor - About', geometry='240x80+500+200')
 
     def show_info(self, *args, **kw):
         messagebox.showinfo(*args, **kw)
@@ -321,7 +284,7 @@ class MainFrame(ttk.Frame):
                     'Current modification will be lost!')
                 if not okay:
                     return
-            initialdir = os.path.join(ROOT_DIR, 'vins')
+            initialdir = os.path.join(cur_dir, 'examples')
             recent_opens = history.get('recent_opens')
             if recent_opens:
                 initialdir = os.path.dirname(recent_opens[0])

@@ -1,6 +1,5 @@
 """patch matplotlib figure, add copy tools"""
 
-
 import io
 from PIL import Image
 import win32clipboard
@@ -12,7 +11,6 @@ import matplotlib.backends.backend_tkagg
 from matplotlib.backend_managers import ToolManager
 
 from util import TextWindow
-
 
 
 class ToolCopyData(ToolBase):
@@ -52,9 +50,13 @@ class ToolCopyToClipboard(ToolCopyToClipboardBase):
             im.convert('RGB').save(output, 'BMP')
             data = output.getvalue()[14:]  # The file header off-set of BMP is 14 bytes
 
+            # self.figure.savefig(output, format='svg')
+            # data = output.getvalue()
+
         win32clipboard.OpenClipboard()
         win32clipboard.EmptyClipboard()
         win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)  # DIB = device independent bitmap
+        # win32clipboard.SetClipboardData(b'image/svg+xml ' + data)  # DIB = device independent bitmap
         win32clipboard.CloseClipboard()
         self.figure.canvas.toolbar.set_message('copy image success')
 

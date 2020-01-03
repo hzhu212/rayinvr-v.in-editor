@@ -1,15 +1,17 @@
 import copy
-import numpy as np
 import os
 import re
 
-from definitions import ROOT_DIR
+import numpy as np
+
 from util import get_file_logger
 
 
-logger_tl = get_file_logger('TripleLine', file=os.path.join(ROOT_DIR, 'log', 'model.log'), level='info')
-logger_ly = get_file_logger('Layer', file=os.path.join(ROOT_DIR, 'log', 'model.log'), level='info')
-logger_vm = get_file_logger('Model', file=os.path.join(ROOT_DIR, 'log', 'model.log'), level='info')
+cur_dir = os.path.dirname(os.path.abspath(__file__))
+
+logger_tl = get_file_logger('TripleLine', file=os.path.join(cur_dir, 'log', 'model.log'), level='info')
+logger_ly = get_file_logger('Layer', file=os.path.join(cur_dir, 'log', 'model.log'), level='info')
+logger_vm = get_file_logger('Model', file=os.path.join(cur_dir, 'log', 'model.log'), level='info')
 
 
 class TripleLine(object):
@@ -17,7 +19,7 @@ class TripleLine(object):
     The 3 lines can fold to 6, 9 or 3N lines when the number of nodes exceed
     10*(N-1)."""
     def __init__(self, data=None):
-        self._data = data
+        self._data = data or []
 
     @classmethod
     def loads(cls, tstr):
@@ -148,12 +150,12 @@ class Layer(object):
         3. Velocity nodes on the bottom of the layer.
     Each part is a TripleLine object."""
     def __init__(self, data=None):
-        self._data = data
+        self._data = data or []
 
     @classmethod
     def loads(cls, lstr):
         """Load the Layer object from string"""
-        layer = cls([])
+        layer = cls()
         lines = lstr.strip().split('\n')
         if len(lines) % 3 != 0:
             raise ValueError('Layer can only load strings containing 3N lines, but "%s" got.' %lstr)
@@ -290,13 +292,40 @@ class Layer(object):
             means poission ratio between 1-2km is 0.5, and 2-4km is 0.48 and so on."""
         self.pois = pois_obj
 
+    def unbind_pois(self):
+        self.pois = None
+
+
+class EndLayer(Layer):
+    """v.in 的最后一层只包含深度信息（两行），需要特殊处理"""
+    @classmethod
+    def loads(cls, lstr):
+        layer = cls()
+        lines = lstr.strip().split('\n')
+        if len(lines) != 2:
+            raise ValueError('The last layer should be consists of 2 lines, but %i got' % (len(lines), ))
+        nnode = len(lines[0].strip().split()) - 1
+        dumb_line = '   ' + ' '.join(['0' for _ in range(nnode)])
+        lines.append(dumb_line)
+        layer._data = [TripleLine.loads('\n'.join(lines)), None, None]
+        layer.fix_depth()
+        return layer
+
+    def dumps(self, idx=1, shrink=False):
+        cp = self.copy()
+        if shrink:
+            cp.recover_depth()
+        tplstr = self.depth.dumps(idx)
+        # 去掉最后一行，只剩两行
+        res = '\n'.join(tplstr.split('\n')[:2]) + '\n'
+        return res
+
 
 class Model(object):
     """The strata model(corresponding to a v.in file).
     Consists of a series of Layer objects."""
     def __init__(self, data=None):
-        self._data = data if data else []
-        self._end_layer_str = ''
+        self._data = data or []
 
     @classmethod
     def loads(cls, model_string):
@@ -307,7 +336,7 @@ class Model(object):
             raise ValueError('The first layer number of a model should be "1".')
         if len(lines)%3 != 2:
             raise ValueError('There should be 2 ending lines at the end of v.in file.')
-        model._end_layer_str = '\n'.join(lines[-2:]) + '\n'
+
         current_layer = 1
         in_layer = []
         for i in range(len(lines)//3+1):
@@ -317,6 +346,8 @@ class Model(object):
                 in_layer.clear()
                 current_layer += 1
             in_layer.extend(lines[3*i:3*(i+1)])
+        # end layer
+        model._data.append(EndLayer.loads('\n'.join(lines[-2:])))
         return model
 
     @classmethod
@@ -325,19 +356,20 @@ class Model(object):
         with open(path_vin, 'r') as f:
             return cls.loads(f.read())
 
-    def _end_layer(self):
-        """Generate the trailing 2 lines at the end of the v.in file"""
-        # return '%2i%9.3f\n%2i%9.3f\n' %(self.nlayer+1, 0, 0, 100)
-        origin_layer_number = self._end_layer_str.lstrip().split()[0]
-        layer_number_len = self._end_layer_str.index(origin_layer_number) + len(origin_layer_number)
-        origin_layer_number = self._end_layer_str[:layer_number_len]
-        new_layer_number = ('%' + str(layer_number_len) + 'd') % (self.nlayer + 1, )
-        return self._end_layer_str.replace(origin_layer_number, new_layer_number)
+    # def _end_layer(self):
+    #     """Generate the trailing 2 lines at the end of the v.in file"""
+    #     # return '%2i%9.3f\n%2i%9.3f\n' %(self.nlayer+1, 0, 0, 100)
+    #     origin_layer_number = self._end_layer_str.lstrip().split()[0]
+    #     layer_number_len = self._end_layer_str.index(origin_layer_number) + len(origin_layer_number)
+    #     origin_layer_number = self._end_layer_str[:layer_number_len]
+    #     new_layer_number = ('%' + str(layer_number_len) + 'd') % (self.nlayer + 1, )
+    #     return self._end_layer_str.replace(origin_layer_number, new_layer_number)
 
     def dumps(self):
         """Dump model into a string in the format of v.in."""
-        return ''.join([ly.dumps(i+1) for i,ly in enumerate(self._data)]) \
-            + self._end_layer()
+        return ''.join([ly.dumps(i+1) for i,ly in enumerate(self._data)])
+        # \
+        #     + self._end_layer()
 
     def dump(self, path_vin):
         """Dump model into a v.in file."""
@@ -583,11 +615,11 @@ class NodeIndex(object):
         return prev_node
 
 
-class ModelProcessor():
+class ModelManager():
     """Model processor"""
     # How fine is the grid data for velocity contouring
-    NGRIDX = 500
-    NGRIDY = 1000
+    NXGRID = 500
+    NYGRID = 500
 
     def __init__(self, model):
         self.model = model
@@ -637,6 +669,8 @@ class ModelProcessor():
 
     def unbind_pois(self):
         self.has_pois = False
+        for ily in range(len(self.model)):
+            self.model[ily].unbind_pois()
 
     def get_vp_data(self):
         """Get Vp data"""
@@ -665,18 +699,28 @@ class ModelProcessor():
         vv = (v_bot - v_top) * (yy - y_top) / (y_bot - y_top) + v_top
         return vv
 
-    def get_v_contour(self):
+    def get_v_contour(self, xlim=None, ylim=None, nxgrid=None, nygrid=None):
         """Get velocity grid data by interpolating velocity block by block"""
-        xlim, ylim = self.model.xlim, self.model.ylim
-        x = np.linspace(xlim[0], xlim[1], self.NGRIDX)
-        y = np.linspace(ylim[0], ylim[1], self.NGRIDY)
+        if not xlim:
+            xlim = self.model.xlim
+        if not ylim:
+            ylim = self.model.ylim
+        if nxgrid is None:
+            nxgrid = self.NXGRID
+        if nygrid is None:
+            nygrid = self.NYGRID
+
+        x = np.linspace(xlim[0], xlim[1], nxgrid)
+        y = np.linspace(ylim[0], ylim[1], nygrid)
         xx, yy = np.meshgrid(x, y)
         vp = np.full(xx.shape, np.nan)
         vs = None
+        pois = None
         if self.has_pois:
             vs = np.full(xx.shape, np.nan)
+            pois = np.full(xx.shape, np.nan)
 
-        for ily in range(len(self.model)-1):
+        for ily in range(len(self.model) - 1):
             ly_cur, ly_next = self.model[ily], self.model[ily+1]
             x_top, x_bot = ly_cur.depth.x, ly_next.depth.x
             y_top, y_bot = ly_cur.depth.y, ly_next.depth.y
@@ -692,6 +736,9 @@ class ModelProcessor():
             v_bot_all = np.interp(x_all, x_v_bot, v_bot)
 
             layer_mask = (np.interp(xx, x_top, y_top) <= yy) & (yy < np.interp(xx, x_bot, y_bot))
+            if not np.any(layer_mask):
+                continue
+
             for iblk in range(len(x_all)-1):
                 x1, x2 = x_all[iblk], x_all[iblk+1]
                 block_mask = layer_mask & (x1 <= xx) & (xx <= x2)
@@ -701,13 +748,14 @@ class ModelProcessor():
                 xx_blk, yy_blk = xx[block_mask], yy[block_mask]
                 vp_blk = self.interp_block(x_cn, y_cn, v_cn, xx_blk, yy_blk)
                 vp[block_mask] = vp_blk
-                # If has pois, calculate vp contour
+                # If has pois, calculate vs and pois contour
                 if self.has_pois:
                     pois_blk = np.interp((x1+x2)/2.0, x_pois, pois_ly)
                     vs_blk = self.vp2vs(vp_blk, pois_blk)
                     vs[block_mask] = vs_blk
+                    pois[block_mask] = pois_blk
 
-        return xx, yy, vp, vs
+        return xx, yy, vp, vs, pois
 
     def get_v_section(self, x):
         y = []

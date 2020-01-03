@@ -1,14 +1,12 @@
 import json
 import logging
-import numpy as np
 import os
 import re
-from scipy.interpolate import griddata
 import tkinter as tk
 import tkinter.ttk as ttk
 
-from definitions import ROOT_DIR
 
+cur_dir = os.path.dirname(os.path.abspath(__file__))
 
 LOG_LEVELS = {
     'debug': logging.DEBUG,
@@ -52,6 +50,18 @@ class ScrollText(tk.Frame):
         self.text.delete('1.0', tk.END)
         self.text.insert(tk.END, string)
         self.text.config(state=tk.DISABLED)
+
+
+def create_label_entry(master, label_text, entry_var, callback, label_width=10, entry_width=16):
+    """create one-line label-entry widget"""
+    label_entry = ttk.Frame(master)
+    label_entry.columnconfigure(0, weight=1)
+    label_entry.grid(column=0, pady=(5, 0), sticky='nswe')
+    ttk.Label(label_entry, text=label_text, width=label_width).grid(row=0, column=0, sticky='nsw')
+    entry = ttk.Entry(label_entry, textvariable=entry_var, width=entry_width)
+    entry.grid(row=0, column=1, sticky='nswe')
+    entry.bind('<Return>', callback)
+    return label_entry
 
 
 class TextWindow(tk.Frame):
@@ -168,7 +178,7 @@ class SessionManager(BaseConfigManager):
     """Manage application session"""
     def __init__(self, autosave=False):
         self.autosave = autosave
-        self.store = os.path.join(ROOT_DIR, 'config', 'session')
+        self.store = os.path.join(cur_dir, 'config', 'session')
         self.data = {
             'file': '',
             'pois': '',
@@ -186,7 +196,7 @@ class HistoryManager(BaseConfigManager):
     """Manage application history"""
     def __init__(self, autosave=False):
         self.autosave = autosave
-        self.store = os.path.join(ROOT_DIR, 'config', 'history')
+        self.store = os.path.join(cur_dir, 'config', 'history')
         self.data = {
             'recent_opens': [],
             'sessions': [],

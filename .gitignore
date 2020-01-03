@@ -1,3 +1,6 @@
+# custom
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -102,8 +105,3 @@ ENV/
 
 # Text Editor
 .vscode/
-
-# custom
-/cache
-/my-vins
-/test.py

@@ -1,11 +1,15 @@
 from collections import OrderedDict
-import matplotlib.pyplot as plt
-import numpy as np
 import os
 
-from definitions import ROOT_DIR
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+
 from util import get_file_logger, Delegator
 from model import Model, NodeIndex
+
+
+cur_dir = os.path.dirname(os.path.abspath(__file__))
 
 
 class BasePloter(object):
@@ -32,7 +36,7 @@ class BasePloter(object):
             markeredgewidth=1, markerfacecolor='None')
         self.logger = get_file_logger(
             name = type(self).__name__,
-            file = os.path.join(ROOT_DIR, 'log', 'ploter.log'),
+            file = os.path.join(cur_dir, 'log', 'ploter.log'),
             level = 'debug')
         self.init_select()
         self.bind_event()
@@ -486,26 +490,32 @@ class VContourPlotDelegator(Delegator):
 
     def __init__(self, delegate, allowed_attrs=None):
         super().__init__(delegate, allowed_attrs)
-        self.init_plot()
+        # 缓存绘图数据
+        self.last_params = None
+        self.last_plotdata = None
+        self.color_levels = 256
 
-    def init_plot(self):
-        self.ax = self.fig.add_subplot(111)
-        self.ax.tick_params(axis='both', which='major', labelsize=9)
-        self.ax.tick_params(axis='both', which='minor', labelsize=8)
-        self.ax.invert_yaxis()
-        self.ax.set_xlabel('X (km)')
-        self.ax.set_ylabel('Depth (km)')
+        # 自定义一个 colormap，即在默认的 jet 最开头加上一个白色
+        white = [1, 1, 1, 1]
+        colorlist = matplotlib.cm.jet(np.linspace(0, 1, self.color_levels)).tolist()
+        self.jet_sm = matplotlib.colors.ListedColormap([white] + colorlist, name='my_jet_sm')
+        self.jet_lg = matplotlib.colors.ListedColormap(colorlist + [white], name='my_jet_lg')
 
-    def plot_vmodel(self):
+
+    def plot_vmodel(self, ax, show_depth_node=False, show_velocity_node=False):
         """Plot velocity nodes"""
-        for layer in self.model_proc.model:
-            self.ax.plot(layer.depth[0], layer.depth[1], 'k.:')
-        vp_data = self.model_proc.get_vp_data()
-        for top_data, bot_data in vp_data:
-            x_v_top, y_v_top = tuple(top_data)
-            x_v_bot, y_v_bot = tuple(bot_data)
-            self.ax.plot(x_v_top, y_v_top, color='k', marker=11, markerfacecolor='white', linestyle='None')
-            self.ax.plot(x_v_bot, y_v_bot, color='k', marker=10, markerfacecolor='white', linestyle='None')
+        for layer in self.model_manager.model:
+            if show_depth_node:
+                ax.plot(layer.depth[0], layer.depth[1], 'k.:', linewidth=0.5)
+            else:
+                ax.plot(layer.depth[0], layer.depth[1], 'k--', linewidth=0.5)
+        if show_velocity_node:
+            vp_data = self.model_manager.get_vp_data()
+            for top_data, bot_data in vp_data:
+                x_v_top, y_v_top = tuple(top_data)
+                x_v_bot, y_v_bot = tuple(bot_data)
+                ax.plot(x_v_top, y_v_top, color='k', marker=11, markerfacecolor='white', linestyle='None')
+                ax.plot(x_v_bot, y_v_bot, color='k', marker=10, markerfacecolor='white', linestyle='None')
 
     def get_format_coord(self, xx, yy, zz):
         def format_coord(x, y):
@@ -519,19 +529,61 @@ class VContourPlotDelegator(Delegator):
             return 'x=%.4f    y=%.4f    z=%.4f' %(x, y, z)
         return format_coord
 
-    def plot_velocity_contour(self):
-        xx, yy, vp, vs = self.model_proc.get_v_contour()
-        zz = vp
-        self.ax.format_coord = self.get_format_coord(xx, yy, zz)
-        p = self.ax.pcolormesh(xx, yy, zz, cmap='jet')
-        # p = self.ax.imshow(
-        #     np.flip(zz, axis=0), cmap='jet', aspect='auto',
-        #     extent=self.model_proc.model.xlim+self.model_proc.model.ylim)
-        # self.ax.invert_yaxis()
-        cbar = self.fig.colorbar(p, shrink=0.8, fraction=0.1, pad=0.03)
-        cbar.ax.set_ylabel('velocity (km/s)')
-        cbar.ax.invert_yaxis()
-        self.plot_vmodel()
+    def get_viewport(self):
+        """get current xlim and ylim of axis"""
+        if not self.fig.axes:
+            return None, None
+        ax = self.fig.axes[0]
+        xlim = ax.get_xbound()
+        ylim = ax.get_ybound()
+        return xlim, ylim
+
+    def plot_velocity_contour(self, plot_type=0, xlim=None, ylim=None, nxgrid=None, nygrid=None, ignore_sea_water=False):
+        """plot_type: 0-Vp, 1-Vs, 2-Pois"""
+        if not xlim:
+            xlim = self.model_manager.model.xlim
+        if not ylim:
+            ylim = self.model_manager.model.ylim
+
+        # 如果参数未改变，只是绘制不同的 plot_type，则使用缓存的数据
+        params = (xlim, ylim, nxgrid, nygrid)
+        if params != self.last_params:
+            # print('calculate new data')
+            xx, yy, vp, vs, pois = self.model_manager.get_v_contour(xlim, ylim, nxgrid, nygrid)
+            self.last_params = params
+            self.last_plotdata = (xx, yy, vp, vs, pois)
+        else:
+            # print('use cached data')
+            xx, yy, vp, vs, pois = self.last_plotdata
+
+        if plot_type == 0:
+            zz = vp
+        elif plot_type == 1:
+            zz = vs
+        elif plot_type == 2:
+            zz = pois
+        else:
+            raise ValueError('Invalid parameter "plot_type"')
+
+        self.fig.clear()
+        ax = self.fig.add_subplot(111)
+        ax.format_coord = self.get_format_coord(xx, yy, zz)
+        if ignore_sea_water:
+            cmap = self.jet_lg if plot_type == 2 else self.jet_sm
+        else:
+            cmap = 'jet'
+        p = ax.contourf(xx, yy, zz, levels=self.color_levels, cmap=cmap)
+        cbar = plt.colorbar(p, ax=ax, shrink=1, fraction=0.1, pad=0.03)
+        cbar.ax.set_ylabel('Velocity (km/s)')
+        # hold the reference to colorbar object for further use
+        cbar.ax.colorbar = cbar
+        self.plot_vmodel(ax)
+
+        ax.invert_yaxis()
+        ax.set_xbound(xlim)
+        ax.set_ybound(ylim)
+        ax.set_xlabel('X (km)')
+        ax.set_ylabel('Depth (km)')
 
 
 class VSectionPlotDelegator(Delegator):
@@ -539,7 +591,7 @@ class VSectionPlotDelegator(Delegator):
 
     TITLES = ('Vp', 'Vs', 'Poisson')
     X_LABELS = ('Vp (km/s)', 'Vs (km/s)', 'Poisson')
-    Y_LABEL = 'mbsf'
+    Y_LABEL = 'Depth (km)'
 
     def __init__(self, delegate, allowed_attrs=None):
         super().__init__(delegate, allowed_attrs)
@@ -558,13 +610,24 @@ class VSectionPlotDelegator(Delegator):
             ax.xaxis.set_label_position('top')
         self.curves = [None] * 3
 
-    def plot_sections(self, section_x):
-        y, vp, vs, pois = self.model_proc.get_section_data(section_x)
-        y = y * 1e3
-        if vs.size > 0:
+    def plot_sections(self, section_x, deduct_layer=None, ylim=None):
+        """plot vp, vs and pois ratio sections.
+        deduct_layer is used to switch between real depth and mbsf.
+        """
+        y, vp, vs, pois = self.model_manager.get_section_data(section_x)
+        if deduct_layer is not None:
+            y -= y[2*deduct_layer]
+        self.plot_vp_section(y, vp)
+        if self.model_manager.has_pois:
             self.plot_vs_section(y, vs)
             self.plot_pois_section(y, pois)
-        self.plot_vp_section(y, vp)
+        else:
+            if self.curves[1]:
+                self.curves[1].set_data([], [])
+                self.curves[2].set_data([], [])
+        if ylim:
+            self.axs[0].set_ybound(ylim)
+        self.fig.canvas.draw()
 
     def plot_vp_section(self, depth, val):
         if self.curves[0] is None:
@@ -588,17 +651,3 @@ class VSectionPlotDelegator(Delegator):
             self.curves[2].set_data(val, depth)
         # self.axs[2].relim()
         # self.axs[2].autoscale_view(scalex=True, scaley=False)
-
-    def flatten_by_layer(self, idx):
-        y = self.curves[0].get_ydata()
-        if y[2*idx] == 0:
-            return
-        y_new = y - y[2*idx]
-        # Reset depth data
-        for curve in self.curves:
-            if curve is None:
-                continue
-            curve.set_ydata(y_new)
-        # Reset depth limit
-        self.axs[0].set_ylim(top=0, bottom=1.05*y_new[-1])
-        self.fig.canvas.draw()

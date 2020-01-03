@@ -1,25 +1,18 @@
 # rayinvr-v.in-editor
 
-[中文文档](https://github.com/hzhu212/rayinvr-v.in-editor/blob/master/readme_zh.md)
+[English Document](https://github.com/hzhu212/rayinvr-v.in-editor/blob/master/readme_en.md)
 
-## Introduction
+## 简介
 
-A simple but useful editor developed with Python3(tkinter+matplotlib) used for editing "strata-velocity model input file (v.in)".
+一款简单易用的“地层模型编辑器”，使用 Python3 编写（借助 tkinter、matplotlib 等第三方库）。
 
-If you aren't interested in the functions of the editor, the code itself is a good example for how to create interactive plot with `matplotlib`.
+如果你对这款编辑器没有兴趣，那么代码本身仍有参考价值，它将教你如何使用 `matplotlib` 创建复杂的交互式绘图，值得参考。
 
-`v.in` is a kind of ascii file used by the program "rayinvr" developed by Zelt and Smith (1992).
+用于编辑一种称作 `v.in` 的文本文件，这种文件为 Zelt 和 Smith 于 1992 年开发的地层反演程序 [Rayinvr](http://terra.rice.edu/department/faculty/zelt/rayinvr.html) 所使用的地层模型格式。
 
-Search the paper "Zelt C A and Smith R B, 1992. Seismic traveltime inversion for 2-D crustal velocity structure. Geophysical Journal International, 108(1): 16-34" for more details.
+关于 Rayinvr 和 `v.in` 的更多详情可搜索文献“Zelt C A and Smith R B, 1992. Seismic traveltime inversion for 2-D crustal velocity structure. Geophysical Journal International, 108(1): 16-34”
 
-Download links for the **rayinvr** program:
-
-- [Download gzip-compressed rayinvr package (0.3 Mb)](http://terra.rice.edu/department/faculty/zelt/rayinvr.tar.gz)
-- [Download uncompressed rayinvr package (1.6 Mb)](http://terra.rice.edu/department/faculty/zelt/rayinvr.tar)
-
-![Screenshot of rayinvr](http://os09d5k4j.bkt.clouddn.com/image/171214/6bHH4fhhJG.png?imageslim)
-
-A sample `v.in` file looks like this:
+一个简单的 `v.in` 文件示例如下:
 
 ```txt
  1    0.00  25.00  50.00  75.00 100.00 125.0  150.00 175.00 200.00 225.00
@@ -43,71 +36,48 @@ A sample `v.in` file looks like this:
  2    0.00 150.00 300.00
  0    5.70   5.70   5.70
          1      1      1
- 3    0.00 100.00 200.00 300.00
- 0   25.00  25.00  25.00  25.00
-         1      1      1      1
  3  300.00
- 0    6.40
-         1
- 3  300.00
- 0    6.73
-        -1
- 4  300.00
  0   40.00
 ```
 
-It represents a strata model with 3 layers. Every layer consists of 3 parts: layer depth, velocity on layer top and velocity on layer bottom. Every part contains 3 lines usually, but can fold to next 3 lines when it's length is large than 10. The integer at the beginning of each part tells which layer it belongs to.
+上述 v.in 文件描述了一个包含 3 层的地层模型。每一层都由 3 个部分组成：地层深度、地层顶部速度、地层底部速度。每个部分一般包含 3 行，但当该部分的长度超过 10 的时候也可折行，如上例中的第一层的地层深度部分，折行后，该部分的第二行行首的 0 应改为 1。每个部分开头的整数描述了该部分位于哪一层。
 
-When working with a strata model, we usually adjust numbers in the `v.in` file by hand, which is annoying, non-intuitive and easy to get wrong. That's why **rayinvr v.in editor** comes into being.
+在调整地层模型时需要手动编辑 `v.in` 文件中的数字，非常的麻烦、不直观，且容易出错。这也就是编写 `rayinvr v.in editor` 这款工具的初衷。
 
-## How to use
-
-### method 1: virtual environment (recommended)
-
-Please use [Pipenv](https://github.com/pypa/pipenv) to manage dependent packages, which is recommended by Python officially. If you have never used Pipenv before, just install it:
+## 下载与安装
 
 ```sh
-pip install pipenv
-```
-
-Then:
-
-```sh
-# download the project from github
+# 下载项目
 git clone https://github.com/hzhu212/rayinvr-v.in-editor.git vin-editor
 cd vin-editor
 
-# create a virtual environment and install packages (may cost several minutes)
-pipenv install
-
-# launch vin-editor from virtual environment
-pipenv run python start.py
-```
-
-### method 1: globally install (unrecommended)
-
-If you are too lazy to create a virtual environment, you can simply install dependent packages globally:
-
-```sh
-# download the project from github
-git clone https://github.com/hzhu212/rayinvr-v.in-editor.git vin-editor
-cd vin-editor
-
-# install dependent packages globally (may cost several minutes)
+# 安装依赖
 pip install -r requirements.txt
 
-# launch vin-editor
-python start.py
+# 启动
+python main.py
+
+# 或双击 vin-editor.bat (Windows) / vin-editor.sh (Linux)
 ```
 
-## Screenshots
+## 运行截图
 
-![mark](http://os09d5k4j.bkt.clouddn.com/image/171220/EFBHF1c7Im.png?imageslim)
+主界面：
 
-![mark](http://os09d5k4j.bkt.clouddn.com/image/171220/5c1Ef9B82h.png?imageslim)
+![Alt text](https://raw.githubusercontent.com/hzhu212/image-store/master/blog/20200103173729.png)
 
-![mark](http://os09d5k4j.bkt.clouddn.com/image/171220/akL5DJ4g76.png?imageslim)
+编辑模型：
 
-![mark](http://os09d5k4j.bkt.clouddn.com/image/171220/hhiGELFBCa.png?imageslim)
+![Alt text](https://raw.githubusercontent.com/hzhu212/image-store/master/blog/20200103173857.png)
 
-![mark](http://os09d5k4j.bkt.clouddn.com/image/171220/J8iFH91ELJ.png?imageslim)
+波速剖面图：
+
+![Alt text](https://raw.githubusercontent.com/hzhu212/image-store/master/blog/20200103173931.png)
+
+波速云图：
+
+![Alt text](https://raw.githubusercontent.com/hzhu212/image-store/master/blog/20200103174006.png)
+
+波速云图支持后期处理（通过 Python 脚本）：
+
+![Alt text](https://raw.githubusercontent.com/hzhu212/image-store/master/blog/20200103174046.png)
